@@ -1,0 +1,68 @@
+{{ define "chats_index.html" }}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/chats">AI 群聊</a>
+    <nav>
+      <a href="/chats">群聊</a>
+      <a href="/settings/model">模型设置</a>
+      <a href="/usage">Token 统计</a>
+      <a href="/health">系统状态</a>
+      <button type="button" class="button-secondary button-small theme-toggle" data-theme-toggle>黑夜模式</button>
+      <form method="post" action="/logout" class="nav-form">
+        <span>{{ .CurrentUser.Email }}</span>
+        <button type="submit" class="button-secondary button-small">退出</button>
+      </form>
+    </nav>
+  </header>
+  <main class="shell">
+    {{ if .Error }}<div class="alert error">{{ .Error }}</div>{{ end }}
+    {{ if .Notice }}<div class="alert notice">{{ .Notice }}</div>{{ end }}
+    <section class="page-header">
+      <div>
+        <h1>AI 群聊</h1>
+        <p>创建一个群聊，添加多个 AI 角色，然后开始讨论。</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>创建群聊</h2>
+      <form method="post" action="/chats" class="inline-form">
+        <label>
+          <span>群聊名称</span>
+          <input name="name" required maxlength="255" placeholder="产品讨论">
+        </label>
+        <button type="submit">创建</button>
+      </form>
+    </section>
+
+    <section class="list">
+      <h2>群聊列表</h2>
+      {{ if .Chats }}
+        {{ range .Chats }}
+          <div class="row-item">
+            <a class="row-main" href="/chats/{{ .ID }}">
+              <strong>{{ .Name }}</strong>
+              <span>进入</span>
+            </a>
+            <form method="post" action="/chats/{{ .ID }}/delete" data-confirm="确认删除这个群聊？">
+              <button type="submit" class="button-danger">删除</button>
+            </form>
+          </div>
+        {{ end }}
+      {{ else }}
+        <p class="empty">还没有群聊。</p>
+      {{ end }}
+    </section>
+  </main>
+  <script src="/static/theme.js"></script>
+</body>
+</html>
+{{ end }}

@@ -1,0 +1,49 @@
+{{ define "health.html" }}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/chats">AI 群聊</a>
+    <nav>
+      <a href="/chats">群聊</a>
+      <a href="/settings/model">模型设置</a>
+      <a href="/usage">Token 统计</a>
+      <a href="/health">系统状态</a>
+      <button type="button" class="button-secondary button-small theme-toggle" data-theme-toggle>黑夜模式</button>
+      <form method="post" action="/logout" class="nav-form">
+        <span>{{ .CurrentUser.Email }}</span>
+        <button type="submit" class="button-secondary button-small">退出</button>
+      </form>
+    </nav>
+  </header>
+  <main class="shell">
+    <section class="page-header">
+      <div>
+        <h1>系统状态</h1>
+        <p>查看 v0.1 运行所需的基础服务是否可用。</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="status-row">
+        <strong>MySQL</strong>
+        <span class="status {{ if eq .MySQLStatus "正常" }}ok{{ else }}bad{{ end }}">{{ .MySQLStatus }}</span>
+      </div>
+      {{ if .MySQLError }}<p class="empty">{{ .MySQLError }}</p>{{ end }}
+      <div class="status-row">
+        <strong>Redis</strong>
+        <span class="status {{ if eq .RedisStatus "正常" }}ok{{ else }}bad{{ end }}">{{ .RedisStatus }}</span>
+      </div>
+      {{ if .RedisError }}<p class="empty">{{ .RedisError }}</p>{{ end }}
+    </section>
+  </main>
+  <script src="/static/theme.js"></script>
+</body>
+</html>
+{{ end }}

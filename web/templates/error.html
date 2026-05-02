@@ -1,0 +1,31 @@
+{{ define "error.html" }}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/chats">AI 群聊</a>
+    <nav>
+      <a href="/chats">群聊</a>
+      <a href="/settings/model">模型设置</a>
+      <a href="/usage">Token 统计</a>
+      <a href="/health">系统状态</a>
+      <button type="button" class="button-secondary button-small theme-toggle" data-theme-toggle>黑夜模式</button>
+    </nav>
+  </header>
+  <main class="shell">
+    <section class="panel">
+      <h1>请求失败</h1>
+      <p>{{ .Error }}</p>
+      <a class="button-secondary" href="/chats">返回群聊</a>
+    </section>
+  </main>
+  <script src="/static/theme.js"></script>
+</body>
+</html>
+{{ end }}

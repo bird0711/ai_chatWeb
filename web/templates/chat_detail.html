@@ -1,0 +1,315 @@
+{{ define "chat_detail.html" }}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/chats">AI 群聊</a>
+    <nav>
+      <a href="/chats">群聊</a>
+      <a href="/settings/model">模型设置</a>
+      <a href="/usage">Token 统计</a>
+      <a href="/health">系统状态</a>
+      <button type="button" class="button-secondary button-small theme-toggle" data-theme-toggle>黑夜模式</button>
+      <form method="post" action="/logout" class="nav-form">
+        <span>{{ .CurrentUser.Email }}</span>
+        <button type="submit" class="button-secondary button-small">退出</button>
+      </form>
+    </nav>
+  </header>
+  <main class="shell chat-shell">
+    {{ if .Error }}<div class="alert error">{{ .Error }}</div>{{ end }}
+    {{ if .Notice }}<div class="alert notice">{{ .Notice }}</div>{{ end }}
+    <section class="page-header chat-page-header">
+      <div>
+        <h1>{{ .Chat.Name }}</h1>
+        <p>{{ len .Roles }} 个 AI 角色 · {{ canSpeakCount .Roles }} 个允许发言 · {{ if .HasConfig }}模型 API 已配置{{ else }}模型 API 尚未配置{{ end }}</p>
+        {{ if .Chat.Topic }}
+          <p class="topic-summary">主题：{{ .Chat.Topic }}</p>
+        {{ end }}
+      </div>
+    </section>
+
+    <section class="chat-workspace">
+      <aside class="chat-sidebar chat-sidebar-left" aria-label="AI 角色">
+        <div class="panel compact-panel">
+          <details class="settings-menu side-menu">
+            <summary>
+              <span>AI 角色</span>
+              <small>{{ canSpeakCount .Roles }}/{{ len .Roles }} 发言</small>
+            </summary>
+            {{ if .Roles }}
+              <div class="role-list">
+                {{ range .Roles }}
+                  <article class="role-card">
+                    <div class="card-header">
+                      <div class="role-heading">
+                        {{ if isImageAvatar .Avatar }}
+                          <img class="avatar-chip avatar-image" src="{{ .Avatar }}" alt="{{ .Name }}">
+                        {{ else }}
+                          <span class="avatar-chip">{{ avatarText .Avatar .Name }}</span>
+                        {{ end }}
+                        <div>
+                          <h3>{{ .Name }}</h3>
+                          {{ if .CanSpeak }}
+                            <span class="status ok">允许发言</span>
+                          {{ else }}
+                            <span class="status muted">已禁言</span>
+                          {{ end }}
+                        </div>
+                      </div>
+                      <div class="actions">
+                        <form method="post" action="/chats/{{ $.Chat.ID }}/roles/{{ .ID }}/toggle-speaking">
+                          <button type="submit" class="button-secondary button-small">{{ if .CanSpeak }}禁言{{ else }}允许发言{{ end }}</button>
+                        </form>
+                        <form method="post" action="/chats/{{ $.Chat.ID }}/roles/{{ .ID }}/delete" data-confirm="确认删除这个 AI 角色？">
+                          <button type="submit" class="button-danger button-small">删除</button>
+                        </form>
+                      </div>
+                    </div>
+                    <p>{{ .Persona }}</p>
+                    <small>{{ .ReplyStyle }} · {{ .Model }} · 思考强度：{{ if .ReasoningEffort }}{{ .ReasoningEffort }}{{ else }}默认{{ end }}</small>
+                    {{ if $.Configs }}
+                      <details class="role-edit">
+                        <summary>编辑角色</summary>
+                        <form method="post" action="/chats/{{ $.Chat.ID }}/roles/{{ .ID }}" class="stack-form" enctype="multipart/form-data">
+                          <label>
+                            <span>角色名称</span>
+                            <input name="name" required maxlength="255" value="{{ .Name }}">
+                          </label>
+                          <label>
+                            <span>本地头像图片</span>
+                            <input type="file" name="avatar_file" accept="image/png,image/jpeg,image/gif,image/webp">
+                            <small>不选择则保留当前头像。</small>
+                          </label>
+                          <label>
+                            <span>人设</span>
+                            <textarea name="persona" required rows="3">{{ .Persona }}</textarea>
+                          </label>
+                          <label>
+                            <span>回复风格</span>
+                            <textarea name="reply_style" required rows="2">{{ .ReplyStyle }}</textarea>
+                          </label>
+                          <label>
+                            <span>API 配置 / 模型</span>
+                            <select name="model_choice" required>
+                              {{ $roleConfigID := .ModelConfigID }}
+                              {{ $roleModel := .Model }}
+                              {{ range $.Configs }}
+                                {{ $config := . }}
+                                <optgroup label="{{ .Name }}">
+                                  {{ range .Models }}
+                                    <option value="{{ $config.ID }}::{{ . }}" {{ if and (eq $config.ID $roleConfigID) (modelEquals . $roleModel) }}selected{{ end }}>{{ $config.Name }} / {{ . }}</option>
+                                  {{ end }}
+                                </optgroup>
+                              {{ end }}
+                            </select>
+                          </label>
+                          <label>
+                            <span>思考强度</span>
+                            <select name="reasoning_effort">
+                              <option value="" {{ if not .ReasoningEffort }}selected{{ end }}>默认</option>
+                              <option value="low" {{ if stringEquals .ReasoningEffort "low" }}selected{{ end }}>低</option>
+                              <option value="medium" {{ if stringEquals .ReasoningEffort "medium" }}selected{{ end }}>中</option>
+                              <option value="high" {{ if stringEquals .ReasoningEffort "high" }}selected{{ end }}>高</option>
+                            </select>
+                            <small>仅在兼容的模型 API 中生效；默认表示不额外传递该参数。</small>
+                          </label>
+                          <label class="checkbox-row">
+                            <input type="checkbox" name="can_speak" value="1" {{ if .CanSpeak }}checked{{ end }}>
+                            <span>允许这个角色参与回复</span>
+                          </label>
+                          <button type="submit">保存角色</button>
+                        </form>
+                      </details>
+                    {{ end }}
+                  </article>
+                {{ end }}
+              </div>
+            {{ else }}
+              <p class="empty">发送消息前至少需要添加两个 AI 角色。</p>
+            {{ end }}
+          </details>
+        </div>
+      </aside>
+
+      <section class="panel messages-panel chat-main">
+        <div class="section-title">
+          <h2>消息</h2>
+          <span>{{ if .Chat.AIReviewEnabled }}AI 互评已开启{{ else }}AI 互评已关闭{{ end }}</span>
+        </div>
+        <div class="message-search" role="search" aria-label="搜索群聊历史">
+          <label for="message-search-input">搜索历史消息</label>
+          <div class="message-search-controls">
+            <input id="message-search-input" type="search" placeholder="搜索当前群聊消息..." autocomplete="off" aria-describedby="message-search-status" aria-controls="messages" data-message-search>
+            <select aria-label="按发送者筛选消息" data-message-sender-filter>
+              <option value="">全部发送者</option>
+              <option value="user">只看用户</option>
+              <option value="ai">只看 AI</option>
+              <option value="system">只看系统</option>
+            </select>
+            <button type="button" class="button-secondary button-small" data-message-search-clear>清空</button>
+          </div>
+          <small id="message-search-status" class="form-help" data-message-search-status>输入关键词或选择发送者，筛选当前已加载的历史消息。</small>
+        </div>
+        <div class="messages" id="messages" data-chat-id="{{ .Chat.ID }}" data-role-count="{{ canSpeakCount .Roles }}" data-ai-review-enabled="{{ if .Chat.AIReviewEnabled }}1{{ else }}0{{ end }}">
+          {{ if .Messages }}
+            {{ range .Messages }}
+              <article class="message-row {{ .SenderType }}" data-message-id="{{ .ID }}" data-sender-type="{{ .SenderType }}">
+                {{ if ne .SenderType "user" }}
+                  {{ if isImageAvatar .SenderAvatar }}
+                    <img class="message-avatar avatar-image" src="{{ .SenderAvatar }}" alt="{{ .SenderName }}">
+                  {{ else }}
+                    <span class="message-avatar">{{ avatarText .SenderAvatar .SenderName }}</span>
+                  {{ end }}
+                {{ end }}
+                <div class="message-bubble">
+                  <div class="message-meta">
+                    <strong>{{ .SenderName }}</strong>
+                    <span>{{ if eq .SenderType "user" }}用户{{ else if eq .SenderType "system" }}系统{{ else }}AI{{ end }}</span>
+                  </div>
+                  <p class="message-content">{{ .Content }}</p>
+                </div>
+                {{ if eq .SenderType "user" }}
+                  <span class="message-avatar">我</span>
+                {{ end }}
+              </article>
+            {{ end }}
+          {{ else }}
+            <p class="empty" data-empty-messages>还没有消息。</p>
+          {{ end }}
+          <p class="empty message-search-empty" data-message-search-empty hidden>没有匹配的消息。</p>
+        </div>
+        <div class="chat-status" id="chat-status" aria-live="polite"></div>
+        <form method="post" action="/chats/{{ .Chat.ID }}/messages" data-async-action="/chats/{{ .Chat.ID }}/messages/async" class="send-form" id="send-form">
+          <label>
+            <span>发送消息</span>
+            <textarea name="content" required rows="3" placeholder="向这个 AI 群聊提一个问题..." aria-describedby="send-shortcut-help" data-enter-submit="true"></textarea>
+          </label>
+          <small id="send-shortcut-help" class="form-help">按 Enter 发送，Shift + Enter 换行。</small>
+          <button type="submit">发送</button>
+        </form>
+      </section>
+
+      <aside class="chat-sidebar chat-sidebar-right" aria-label="群聊设置">
+        <div class="panel compact-panel">
+          <details class="settings-menu side-menu">
+            <summary>
+              <span>讨论主题</span>
+              <small>{{ if .Chat.Topic }}已设置{{ else }}未设置{{ end }}</small>
+            </summary>
+            <form method="post" action="/chats/{{ .Chat.ID }}/topic" class="stack-form">
+              <label>
+                <span>群聊主题</span>
+                <textarea name="topic" rows="4" maxlength="500" placeholder="例如：围绕 v0.3 的用户体验优化提出可执行建议。">{{ .Chat.Topic }}</textarea>
+              </label>
+              <small class="form-help">设置后，AI 普通回复和互评都会优先围绕该主题展开；留空可取消主题引导。</small>
+              <button type="submit">保存主题</button>
+            </form>
+          </details>
+        </div>
+
+        <div class="panel compact-panel">
+          <details class="settings-menu side-menu">
+            <summary>
+              <span>添加 AI 角色</span>
+              <small>新成员</small>
+            </summary>
+            {{ if .Configs }}
+              <form method="post" action="/chats/{{ .Chat.ID }}/roles" class="stack-form" enctype="multipart/form-data">
+                <label>
+                  <span>角色名称</span>
+                  <input name="name" required maxlength="255" placeholder="严谨架构师">
+                </label>
+                <label>
+                  <span>本地头像图片</span>
+                  <input type="file" name="avatar_file" accept="image/png,image/jpeg,image/gif,image/webp">
+                </label>
+                <label>
+                  <span>人设</span>
+                  <textarea name="persona" required rows="3" placeholder="你会从架构和长期维护角度审视方案。"></textarea>
+                </label>
+                <label>
+                  <span>回复风格</span>
+                  <textarea name="reply_style" required rows="2" placeholder="简洁、直接、说明取舍。"></textarea>
+                </label>
+                <label>
+                  <span>API 配置 / 模型</span>
+                  <select name="model_choice" required>
+                    {{ range .Configs }}
+                      {{ $config := . }}
+                      <optgroup label="{{ .Name }}">
+                        {{ range .Models }}
+                          <option value="{{ $config.ID }}::{{ . }}">{{ $config.Name }} / {{ . }}</option>
+                        {{ end }}
+                      </optgroup>
+                    {{ end }}
+                  </select>
+                </label>
+                <label>
+                  <span>思考强度</span>
+                  <select name="reasoning_effort">
+                    <option value="" selected>默认</option>
+                    <option value="low">低</option>
+                    <option value="medium">中</option>
+                    <option value="high">高</option>
+                  </select>
+                  <small>仅在兼容的模型 API 中生效；默认表示不额外传递该参数。</small>
+                </label>
+                <button type="submit">添加角色</button>
+              </form>
+            {{ else }}
+              <p class="empty">请先在模型设置中填写支持的模型列表，然后再添加 AI 角色。</p>
+              <a class="button-secondary" href="/settings/model">前往模型设置</a>
+            {{ end }}
+          </details>
+        </div>
+
+        <div class="panel compact-panel">
+          <details class="settings-menu side-menu">
+            <summary>
+              <span>AI 互评</span>
+              <small>{{ if .Chat.AIReviewEnabled }}已开启{{ else }}已关闭{{ end }}</small>
+            </summary>
+            <p class="empty">开启后，AI 完成第一轮回复后，会追加最多 2 条基于其他 AI 回答的补充或反驳。</p>
+            <form method="post" action="/chats/{{ .Chat.ID }}/ai-review" class="actions">
+              {{ if .Chat.AIReviewEnabled }}
+                <input type="hidden" name="enabled" value="0">
+                <span class="status ok">已开启</span>
+                <button type="submit" class="button-secondary">关闭互评</button>
+              {{ else }}
+                <input type="hidden" name="enabled" value="1">
+                <span class="status muted">已关闭</span>
+                <button type="submit">开启互评</button>
+              {{ end }}
+            </form>
+          </details>
+        </div>
+
+        <div class="panel compact-panel">
+          <details class="settings-menu side-menu">
+            <summary>
+              <span>群聊管理</span>
+              <small>设置</small>
+            </summary>
+            <div class="stack-form">
+              <a class="button-secondary" href="/settings/model">模型设置</a>
+              <form method="post" action="/chats/{{ .Chat.ID }}/delete" data-confirm="确认删除这个群聊？">
+                <button type="submit" class="button-danger">删除群聊</button>
+              </form>
+            </div>
+          </details>
+        </div>
+      </aside>
+    </section>
+  </main>
+  <script src="/static/theme.js"></script>
+  <script src="/static/chat.js"></script>
+</body>
+</html>
+{{ end }}

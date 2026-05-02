@@ -1,0 +1,104 @@
+{{ define "settings.html" }}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/chats">AI 群聊</a>
+    <nav>
+      <a href="/chats">群聊</a>
+      <a href="/settings/model">模型设置</a>
+      <a href="/usage">Token 统计</a>
+      <a href="/health">系统状态</a>
+      <button type="button" class="button-secondary button-small theme-toggle" data-theme-toggle>黑夜模式</button>
+      <form method="post" action="/logout" class="nav-form">
+        <span>{{ .CurrentUser.Email }}</span>
+        <button type="submit" class="button-secondary button-small">退出</button>
+      </form>
+    </nav>
+  </header>
+  <main class="shell">
+    {{ if .Error }}<div class="alert error">{{ .Error }}</div>{{ end }}
+    {{ if .Notice }}<div class="alert notice">{{ .Notice }}</div>{{ end }}
+    <section class="page-header">
+      <div>
+        <h1>模型 API 设置</h1>
+        <p>配置一个 OpenAI-compatible 接口，并填写该 API 支持的模型列表。</p>
+      </div>
+    </section>
+
+    <section class="list">
+      <h2>已保存的 API 配置</h2>
+      {{ if .Configs }}
+        {{ range .Configs }}
+          <div class="row-item">
+            <div class="row-main">
+              <div>
+                <strong>{{ .Name }}</strong>
+                <span>{{ .Provider }} · {{ .DefaultModel }}</span>
+              </div>
+              <span>{{ len .Models }} 个模型</span>
+            </div>
+            <form method="post" action="/settings/model/{{ .ID }}/delete" data-confirm="确认删除这个 API 配置？仍被角色使用的配置无法删除。">
+              <button type="submit" class="button-danger">删除</button>
+            </form>
+          </div>
+        {{ end }}
+      {{ else }}
+        <p class="empty">还没有 API 配置。</p>
+      {{ end }}
+    </section>
+
+    <section class="panel">
+      <h2>添加 API 配置</h2>
+      <form method="post" action="/settings/model" class="stack-form">
+        <label>
+          <span>配置名称</span>
+          <input name="name" required maxlength="255" value="{{ .Config.Name }}" placeholder="OpenAI 主账号">
+        </label>
+        <label>
+          <span>供应商</span>
+          <input name="provider" required value="{{ if .Config.Provider }}{{ .Config.Provider }}{{ else }}openai-compatible{{ end }}">
+        </label>
+        <label>
+          <span>Base URL</span>
+          <input name="base_url" required value="{{ .Config.BaseURL }}" placeholder="https://api.openai.com/v1">
+        </label>
+        <label>
+          <span>API Key</span>
+          <input name="api_key" required type="password" value="{{ .Config.APIKey }}" placeholder="sk-...">
+        </label>
+        <label>
+          <span>支持的模型列表</span>
+          <textarea name="models" required readonly rows="5" placeholder="点击下方“检测连接并获取模型”后自动填充。">{{ joinModels .Config.Models }}</textarea>
+        </label>
+        <label>
+          <span>默认模型</span>
+          {{ if .Config.Models }}
+            <select name="default_model" required>
+              {{ range .Config.Models }}
+                <option value="{{ . }}" {{ if eq . $.Config.DefaultModel }}selected{{ end }}>{{ . }}</option>
+              {{ end }}
+            </select>
+          {{ else }}
+            <select name="default_model" required disabled>
+              <option>请先检测连接并获取模型</option>
+            </select>
+          {{ end }}
+        </label>
+        <div class="actions">
+          <button type="submit" formaction="/settings/model/check">检测连接并获取模型</button>
+          <button type="submit" {{ if not .Config.Models }}disabled{{ end }}>保存为新配置</button>
+        </div>
+      </form>
+    </section>
+  </main>
+  <script src="/static/theme.js"></script>
+</body>
+</html>
+{{ end }}

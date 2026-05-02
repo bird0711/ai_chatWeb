@@ -1,0 +1,684 @@
+# AI Coding Status
+
+## Current Phase
+
+v0.3 completed.
+
+## Current Goal
+
+Prepare v1.0 planning from the remaining P3 scope.
+
+## Completed
+
+- Created the initial AI control document set under `docs/ai/`.
+- Defined status tracking, next-step control, and backlog tracking documents.
+- Recorded the rule that every future task round must update `STATUS.md`, `NEXT.md`, and `BACKLOG.md`.
+- Created `docs/ai/00-vision.md`.
+- Captured the initial product vision around AI group chats, configurable AI roles, model API management, real-time messaging, history, and future advanced capabilities.
+- Created `docs/ai/01-scope.md`.
+- Defined P0, P1, P2, P3, and Non-goals with reasons for each capability.
+- Synchronized non-P0 capabilities into `docs/ai/BACKLOG.md`.
+- Created `docs/ai/02-roadmap.md`.
+- Mapped P0 into v0.1 MVP only.
+- Mapped P1, P2, and P3 capabilities into v0.2, v0.3, and v1.0.
+- Added verifiable completion standards for every roadmap version.
+- Created `docs/ai/03-mvp-contract.md`.
+- Defined the v0.1 MVP target, required UI, required user operation path, backend capabilities, verification behavior, exclusions, technology constraints, acceptance checklist, stop conditions, and non-MVP handling rules.
+- User manually confirmed that `docs/ai/03-mvp-contract.md` can be used as the v0.1 implementation contract.
+- Created `docs/ai/04-skeleton.md`.
+- Defined MVP-focused modules, directory structure, module responsibilities, core APIs, data structures, main sequence, boundaries, and test entry points.
+- User confirmed concrete stack choices: Gin framework, MySQL, and Redis.
+- Implemented v0.1 source skeleton and MVP path:
+  - Gin server entrypoint.
+  - Local run script with automatic fallback from port 8080 to the first free port in 8081-8090.
+  - MySQL store and migrations.
+  - Automatic `ai_chat` database creation when `MYSQL_DSN` is not provided.
+  - Redis connection check.
+  - OpenAI-compatible AI client.
+  - Service layer MVP rules.
+  - Chinese Web UI templates and CSS.
+  - HTTP routes for chats, roles, model settings, and messages.
+- Updated model selection so AI roles can only select models configured in model API settings.
+- Added model API connection check that fetches supported models from OpenAI-compatible `/models`.
+- Changed default model selection to a dropdown populated from fetched supported models.
+- Improved send-message error feedback to include per-role AI failure reasons.
+- Added `/health` system status page for MySQL and Redis.
+- Created `docs/ai/05-mvp.md`.
+- Added tests for service-layer MVP rules and HTTP/UI form path.
+- User confirmed the v0.1 main path succeeded.
+- User reported the main remaining issues as refresh-based chat latency, need for chat-like realtime behavior, deletion of AI roles, deletion of chats, and frontend polish.
+- Created `docs/ai/06-v0.2-decision.md`.
+- Decided that v0.2 first slice will use asynchronous send plus local live update instead of introducing WebSocket immediately.
+- Defined AI role deletion behavior.
+- Defined group chat deletion behavior.
+- Limited v0.2 frontend polish to main-path usability: no full-page refresh on send, visible loading/error states, and safer delete interactions.
+- Defined v0.2 first-slice acceptance checks.
+- Implemented v0.2 first slice:
+  - Added asynchronous message submission endpoint.
+  - Added message update polling endpoint.
+  - Added frontend JavaScript for no-refresh send, immediate user-message append, AI reply polling, and visible status/error feedback.
+  - Added AI role deletion.
+  - Added group chat deletion.
+  - Added delete confirmation prompts.
+  - Preserved historical messages when an AI role is deleted.
+  - Added system messages for asynchronous AI reply failures.
+- Kept the original synchronous message form route as a fallback path.
+- Added service-layer tests for deleted-role behavior and incremental message reads.
+- Added HTTP tests for asynchronous send, message updates, role deletion, chat deletion, and deleted-chat access.
+- Fixed a user-reported v0.2 async-send browser bug:
+  - Symptom: `POST /chats/{id}/messages/async` returned `validation error: message content is required`.
+  - Cause: frontend JavaScript disabled the textarea before building `FormData`; disabled fields are excluded from form submission.
+  - Fix: build the `FormData` payload before disabling the input.
+- User re-tested the async-send fix locally and confirmed the bug is fixed.
+- User verified the remaining v0.2 first-slice browser checks:
+  - AI roles can be deleted.
+  - AI replies are generated and appear in the chat flow.
+  - Group chats can be deleted.
+- Clarified that “AI reply automatic append” means AI replies appear at the bottom of the current message list without a manual page refresh.
+- User explicitly confirmed that automatic reply append works normally.
+- Created `docs/ai/07-v0.2-second-slice-decision.md`.
+- Selected AI role editing and speaking permission switch as the v0.2 second slice.
+- Defined UI behavior, backend behavior, acceptance checks, non-goals, stop conditions, and the next coding slice for v0.2 second slice.
+- Implemented v0.2 second slice:
+  - Added `CanSpeak` to the role domain model.
+  - Added MySQL `roles.can_speak` migration with existing roles defaulting to allowed speaking.
+  - Added role lookup and role update Store methods.
+  - Added service methods for role editing and speaking permission toggle.
+  - Updated message sending so only roles with speaking permission participate.
+  - Updated send validation to require at least two roles with speaking permission.
+  - Added HTTP routes for role editing and speaking permission toggle.
+  - Updated chat detail UI to show speaking status, quick toggle, and role edit form.
+  - Kept model selection constrained to the configured supported model list.
+- Added service-layer tests for role editing, speaking permission toggle, muted-role exclusion, and speaking-permission blocking.
+- Added HTTP tests for role editing, speaking permission toggle, blocked sending with too few speaking roles, and re-enabled role replies.
+- Reviewed the requested chat-message display optimization against existing roadmap and backlog.
+- Found related broad P2 items for frontend polish and desktop/mobile adaptation, but no explicit backlog item for realistic chat-bubble/message queue presentation by sender role.
+- Added the requested realistic chat-message display optimization to the P2 backlog instead of implementing it in the current v0.2 second-slice verification step.
+- User verified all current functions are normal after v0.2 second-slice implementation.
+- User confirmation is treated as verification of AI role editing, speaking permission switch, and related v0.2 first-slice regression checks.
+- Evaluated the remaining v0.2 P1 candidates for the third slice.
+- Created `docs/ai/08-v0.2-third-slice-decision.md`.
+- Selected AI-to-AI supplement/rebuttal as the v0.2 third slice because it can be implemented on top of the existing chat, role, message, and async append flow without account or API-management redesign.
+- Implemented v0.2 third slice:
+  - Added `AIReviewEnabled` to the chat domain model.
+  - Added MySQL `chats.ai_review_enabled` migration with existing chats defaulting to disabled.
+  - Added chat AI review toggle Store and service methods.
+  - Added OpenAI-compatible AI review generation with a dedicated review prompt.
+  - Updated message generation so AI review runs only when the chat switch is enabled and first-round replies have at least two successes.
+  - Limited AI review to at most 2 additional AI messages.
+  - Saved AI review replies as normal AI messages so they append through the existing async message flow.
+  - Added HTTP route and chat detail UI for the AI review switch.
+- Added service tests for AI review disabled/enabled behavior and the maximum review reply count.
+- Added HTTP tests for the AI review switch and async appended review replies.
+- Fixed a user-reported v0.2 third-slice browser issue:
+  - Symptom: AI review switch enabled successfully, but review replies did not append on the page.
+  - Cause: frontend polling stopped after receiving the normal first-round AI replies; AI review replies are generated after first-round replies, so the page stopped polling too early.
+  - Fix: expose the per-chat AI review state to the message container and make the frontend wait for `speaking role count + up to 2 review replies` before stopping polling.
+- Re-read `docs/ai/STATUS.md`, `docs/ai/NEXT.md`, and `docs/ai/BACKLOG.md` for the current unique recommended action.
+- Confirmed that the current unique recommended action is verification of the v0.2 third slice, not a new feature implementation.
+- Re-checked the v0.2 third-slice implementation references for AI review routing, service behavior, template state, frontend polling, and tests.
+- Re-ran the shortest automated regression checks available in this environment after the polling fix.
+- User verified the v0.2 third slice in the local browser:
+  - AI review switch works.
+  - AI review replies append after the polling fix.
+- Implemented the v0.2 login and account-isolation slice:
+  - Added user and session domain models.
+  - Added MySQL `users` and `sessions` tables.
+  - Added `user_id` ownership columns to `chats` and `model_configs`.
+  - Added compatibility migration that assigns legacy unowned chats and model configs to the first registered user.
+  - Added registration, login, session lookup, and logout services.
+  - Stored passwords with bcrypt.
+  - Stored session cookies as opaque tokens while persisting only token hashes.
+  - Added Gin routes for `/login`, `/register`, and `/logout`.
+  - Added authentication middleware that protects chat, settings, health, message, role, and delete routes.
+  - Added a Chinese login/register page.
+  - Added current-account display and logout button in the top navigation.
+  - Scoped chat listing, chat access, chat deletion, AI review toggle, model API settings, and message paths to the authenticated user.
+  - Preserved the existing v0.1/v0.2 chat, role, async reply, and AI review paths behind authentication.
+- User verified the v0.2 login and account-isolation slice in the local browser:
+  - data isolation works.
+  - login works.
+  - after logging in again, the existing chat main path still works.
+- Implemented the v0.2 complete API management slice:
+  - Added a human-readable name to model API configs.
+  - Changed model API settings from single config replacement to multiple saved configs per account.
+  - Added model config listing and deletion.
+  - Blocked deletion of a model config while it is still used by an AI role.
+  - Added `model_config_id` to AI roles.
+  - Added compatibility migration that binds legacy roles to the first model config for the owning user when possible.
+  - Updated role creation and editing so the user chooses a combined API config/model option.
+  - Updated send-message behavior so each AI role uses its own selected API config and model.
+  - Kept API management limited to OpenAI-compatible configs, without advanced routing or supplier orchestration.
+- User verified the v0.2 complete API management slice in the local browser:
+  - multiple API configs work normally.
+  - role API/model selection works normally.
+  - chat reply flow remains normal.
+- v0.2 P1 scope is now complete by current documentation:
+  - user login and account data isolation.
+  - complete API management with multiple API configs, model lists, and role bindings.
+  - AI role deletion, editing, and speaking permission switch.
+  - group chat deletion.
+  - stable no-refresh async reply append.
+  - AI-to-AI supplement/rebuttal.
+  - MVP-level automated tests and repeatable acceptance checks.
+- Created `docs/ai/09-v0.3-first-slice-decision.md`.
+- Selected chat-like message presentation as the first v0.3/P2 slice.
+- Deferred P2 items with broader backend or product coupling:
+  - group chat topic guidance.
+  - reasoning effort configuration.
+  - Token cost statistics.
+  - broad desktop/mobile adaptation.
+  - history search and management.
+- Kept P3 items out of the v0.3 first slice:
+  - file upload.
+  - tools.
+  - public community.
+  - plugin market.
+  - deployment and CI.
+- Implemented the v0.3 first slice:
+  - Updated historical chat message markup in `chat_detail.html` to use `message-row`, `message-bubble`, `message-meta`, and `message-content`.
+  - Updated frontend async append rendering in `chat.js` to create the same chat-like message DOM for user, AI, and system messages.
+  - Updated CSS so user messages align right, AI messages align left, and system messages are centered/softened.
+  - Added message bubble width, wrapping, and mobile constraints to avoid overflow and overlap.
+  - Kept the existing async send, polling, AI review, account isolation, and API management behavior unchanged.
+- User verified that the v0.3 first slice content is functionally normal, while reporting that the page still looks visually poor.
+- Implemented the v0.3 chat layout polish slice:
+  - Reworked the chat detail page into a centered three-column workspace.
+  - Kept the main message flow in the visual center.
+  - Moved the AI role list and role controls into the left sidebar.
+  - Moved add-role, AI review, model settings entry, and group delete controls into the right sidebar.
+  - Kept secondary controls inside collapsible menus to reduce visual noise.
+  - Added responsive layout rules so the chat stays usable on narrower screens.
+  - Kept message storage, async send, polling, AI review, role management, account isolation, and API management behavior unchanged.
+- Implemented the v0.3 chat UI refinement slice:
+  - Changed both side areas to collapsed-by-default menus.
+  - Simplified the send button text from “发送给 AI 角色” to “发送”.
+  - Added a visual background contrast between the settings sidebars and the central chat area.
+  - Added lightweight AI role avatar support through `roles.avatar`.
+  - Supported local avatar image uploads; empty avatars fall back to role-name text.
+  - Displayed role avatars in role cards, historical messages, and newly appended async messages.
+  - Kept avatar support limited to role-profile images and out of AI file analysis scope.
+  - Added MySQL migration support for the new `roles.avatar` column.
+- Refined the v0.3 chat visual design after researching general UI guidance:
+  - Used centered primary content and auxiliary sidebars in line with common split-view/sidebar guidance.
+  - Re-centered and simplified the group chat title area.
+  - Improved spacing, borders, shadow, and neutral surfaces so the chat area is the primary visual layer.
+  - Adjusted AI/settings sidebars to use a lower-emphasis background color.
+  - Replaced avatar URL entry with a local image file picker.
+  - Fixed an HTTP test assertion so deleted-role controls are checked without treating preserved historical messages as a failure.
+- Implemented local AI avatar upload:
+  - Added `/uploads` static serving backed by the local `uploads` directory.
+  - Added role avatar upload handling for create and edit forms.
+  - Allowed jpg, png, gif, and webp avatar images up to 2MB.
+  - Preserved the existing avatar when editing a role without choosing a new file.
+  - Added `uploads/` to `.gitignore`.
+  - Removed URL-copy avatar UI from the chat page.
+- User verified that the P2 frontend test experience optimization is normal.
+- Implemented the v0.3 chat input keyboard shortcut slice:
+  - Bound Enter in the chat message textarea to submit the send form.
+  - Kept Shift + Enter available for multiline input.
+  - Ignored composing input events so IME composition does not accidentally send messages.
+  - Reused the existing async send form path instead of adding a new backend route.
+  - Added visible input help text: "按 Enter 发送，Shift + Enter 换行。"
+  - Added HTTP/template coverage for the shortcut help text.
+- Executed the unique next recommendation from `docs/ai/NEXT.md` as far as the current environment allows:
+  - Re-read `README.md` startup instructions and `docs/ai/NEXT.md`.
+  - Confirmed there is no separate `start` document in the repository; startup instructions are in `README.md`.
+  - Re-ran automated tests and build successfully.
+  - Started the app through `scripts/run-local.sh` with `GOCACHE=/tmp/go-build-ai-chat`.
+  - Confirmed the real app process connected to local MySQL and Redis and listened on `http://localhost:8080`.
+  - Confirmed `/login` is reachable from the started local service.
+  - Registered a temporary verification account, created a temporary chat, and opened its chat detail page through the real local service.
+  - Confirmed the real chat page renders the send form, `data-async-action`, textarea `aria-describedby`, and help text "按 Enter 发送，Shift + Enter 换行。"
+  - Deleted the temporary chat and logged out the temporary session after verification.
+  - Confirmed this environment does not provide Chrome, Chromium, or Firefox, so actual keyboard-event browser automation could not be completed here.
+- User verified that the Enter-to-send shortcut works normally in the local browser.
+- Created `docs/ai/10-v0.3-topic-slice-decision.md`.
+- Selected group chat topic guidance as the next v0.3/P2 slice after Enter-to-send verification.
+- Implemented the v0.3 topic guidance slice:
+  - Added `Topic` to the chat domain model.
+  - Added MySQL migration support for `chats.topic`.
+  - Added Store and service methods for updating a chat topic.
+  - Added topic validation with a 500-character limit.
+  - Added HTTP route `POST /chats/:chatID/topic`.
+  - Added a right-sidebar “讨论主题” menu on the chat detail page.
+  - Added topic summary display below the centered chat title.
+  - Updated AI normal reply system prompts to include the chat topic when set.
+  - Updated AI review system prompts to include the chat topic when set.
+  - Kept message storage, async send, polling, AI review, role management, account isolation, API management, avatar display, and Enter-to-send behavior unchanged.
+- Added tests for topic persistence, topic validation, topic route rendering, and prompt topic injection.
+- Investigated the AI model API connection path:
+  - Confirmed the web “检测连接并获取模型” path calls `Services.CheckModelConfig`.
+  - Confirmed `CheckModelConfig` calls the OpenAI-compatible client `ListModels`.
+  - Confirmed model-list detection sends `GET {base_url}/models` with `Authorization: Bearer <api_key>`.
+  - Confirmed actual AI replies send `POST {base_url}/chat/completions`.
+  - Confirmed saved role models are validated against the saved model config model list.
+  - Confirmed automated tests and build still pass.
+  - Attempted to inspect saved local MySQL model configs, but the sandbox cannot create local TCP sockets.
+  - Requested escalated MySQL access for diagnosis, but the approval service rejected the action because it returned `502 Bad Gateway`.
+  - Did not output or expose any API key.
+- User reported that the model API is now normal.
+- User reported that Enter still inserts a newline instead of sending.
+- Implemented an Enter-to-send browser compatibility fix:
+  - Changed the chat textarea shortcut listener to capture phase.
+  - Added both `keydown` and `keypress` listeners.
+  - Treated `event.key`, `event.code`, `event.keyCode`, and `event.which` as Enter signals.
+  - Kept Shift/Ctrl/Alt/Meta + Enter from sending.
+  - Kept IME composition guarded through `event.isComposing` and `keyCode === 229`.
+  - Added `event.stopPropagation()` after preventing the newline.
+  - Added `data-enter-submit="true"` to the chat textarea for easier markup verification.
+  - Reused the existing async send form path and did not change backend message behavior.
+- User verified that the Enter-to-send compatibility fix works normally.
+- Attempted to follow `README.md` startup instructions and `docs/ai/NEXT.md` for the next verification step:
+  - Re-ran automated tests and build successfully.
+  - Attempted to start the app with `env GOCACHE=/tmp/go-build-ai-chat sh scripts/run-local.sh`.
+  - Sandbox startup failed at local MySQL TCP connection with `socket: operation not permitted`.
+  - Requested escalated startup for local MySQL/Redis verification, but the approval service rejected the action because it returned `502 Bad Gateway`.
+  - Did not attempt an indirect workaround after the escalation rejection.
+- User verified that the v0.3 topic guidance functionality is normal.
+- Created `docs/ai/11-v0.3-theme-mode-slice-decision.md`.
+- Selected white/dark theme mode as the next v0.3/P2 slice.
+- Implemented the v0.3 theme mode slice:
+  - Added `web/static/theme.js`.
+  - Added a theme toggle button to the main authenticated pages and error page.
+  - Loaded `theme.js` on chat list, chat detail, model settings, health, and error pages.
+  - Theme defaults to the system color-scheme preference.
+  - Theme selection is saved in `localStorage` under `ai-chat-theme`.
+  - Added `[data-theme="dark"]` CSS coverage for body, topbar, panels, lists, sidebars, chat area, messages, bubbles, inputs, buttons, alerts, status pills, and settings menus.
+  - Kept backend routes, database schema, message storage, AI calls, account isolation, API management, topic guidance, avatar display, and Enter-to-send unchanged.
+- Added HTTP tests verifying theme toggle markup and `theme.js` on primary authenticated pages.
+- User verified that the v0.3 theme mode functionality is normal.
+- Created `docs/ai/12-v0.3-developer-settings-decision.md`.
+- Selected developer settings documentation and basic configuration/environment management as the next v0.3/P2 slice.
+- Added `.env.example` with the current local configuration variables:
+  - `ADDR`
+  - `MYSQL_DSN`
+  - `MYSQL_USER`
+  - `MYSQL_PASSWORD`
+  - `MYSQL_HOST`
+  - `MYSQL_PORT`
+  - `MYSQL_DATABASE`
+  - `REDIS_ADDR`
+  - `REDIS_PASSWORD`
+  - `REDIS_DB`
+  - `TEMPLATE_GLOB`
+  - `STATIC_DIR`
+  - `UPLOAD_DIR`
+- Added `docs/ai/developer-settings.md` covering:
+  - required local services.
+  - environment variables and defaults.
+  - local startup.
+  - MySQL migration behavior.
+  - Redis connectivity.
+  - model API settings and OpenAI-compatible endpoint requirements.
+  - avatar uploads.
+  - browser settings for theme mode and Enter-to-send.
+  - common troubleshooting for MySQL, Redis, ports, model detection, and chat reply failures.
+- Updated `README.md` to point to `docs/ai/developer-settings.md`.
+- Kept runtime code unchanged in this documentation slice.
+- Reviewed the v0.3 developer settings documentation against current code and scripts:
+  - Confirmed supported environment variables match `.env.example`.
+  - Confirmed `scripts/run-local.sh` defaults for MySQL, Redis, and automatic port selection match the documentation.
+  - Confirmed upload directory behavior, allowed avatar image extensions, and 2 MB avatar size limit match the documentation.
+  - Confirmed `README.md` links to `docs/ai/developer-settings.md`.
+  - Confirmed no `docs/ai/START.md` file exists; the active control/startup sources remain `docs/ai/NEXT.md`, `docs/ai/STATUS.md`, `docs/ai/BACKLOG.md`, and `README.md`.
+  - Re-ran automated tests and build successfully after the documentation review.
+- Created `docs/ai/13-v0.3-history-search-slice-decision.md`.
+- Selected current-group loaded-message search and sender filtering as the first v0.3 history search slice.
+- Implemented the v0.3 history search and filtering first slice:
+  - Added a history search control above the chat message list.
+  - Added keyword filtering for the currently loaded messages.
+  - Added sender-type filtering for all messages, user messages, AI messages, and system messages.
+  - Added a clear button that resets search and sender filtering.
+  - Added a no-match empty state.
+  - Added `data-sender-type` markers to historical message markup and async appended message markup.
+  - Re-applies the active filter when new messages are appended by the existing async polling flow.
+  - Kept message storage, backend routes, async send, polling, AI review, topic guidance, account isolation, API management, and model calls unchanged.
+- Added HTTP/template test coverage for history search markup.
+- User verified that the v0.3 history search and filtering first slice works normally.
+- Created `docs/ai/14-v0.3-reasoning-effort-slice-decision.md`.
+- Selected role-level reasoning effort configuration as the next v0.3/P2 slice.
+- Implemented the v0.3 reasoning effort configuration slice:
+  - Added `ReasoningEffort` to the role domain model.
+  - Added MySQL migration support for `roles.reasoning_effort`.
+  - Persisted reasoning effort when creating and editing roles.
+  - Added role create/edit UI controls for default, low, medium, and high reasoning effort.
+  - Added role-card display of the current reasoning effort.
+  - Passed non-default role reasoning effort as `reasoning_effort` in OpenAI-compatible chat completion requests.
+  - Omitted `reasoning_effort` for default role configuration.
+  - Kept message storage, async send, polling, topic guidance, AI review flow, account isolation, API management, and model detection unchanged.
+- Added tests for reasoning effort validation, template markup, and OpenAI-compatible request body behavior.
+- User verified that the v0.3 reasoning effort configuration slice works normally.
+- Created `docs/ai/15-v0.3-responsive-adaptation-slice-decision.md`.
+- Selected chat detail responsive adaptation as the next v0.3/P2 slice.
+- Implemented the v0.3 responsive adaptation slice:
+  - Reduced chat main column minimum-width pressure to prevent horizontal overflow.
+  - Added page-level horizontal overflow protection.
+  - Improved tablet layout so right-side settings move below the main chat area.
+  - Improved mobile layout so the main chat area appears before settings and role controls.
+  - Improved narrow-screen top navigation wrapping and account row behavior.
+  - Adjusted mobile message area padding, bubble width, avatar size, metadata wrapping, and long-content containment.
+  - Made the mobile send form easier to reach with sticky bottom positioning and larger touch targets.
+  - Kept HTML structure, backend routes, database schema, message flow, AI calls, topic guidance, AI review, and role configuration behavior unchanged.
+- Added CSS regression coverage for key responsive rules.
+- Executed the current `NEXT.md` verification step as far as this environment allows:
+  - Confirmed no `docs/ai/START.md` file exists; startup instructions remain in `README.md`.
+  - Re-ran automated tests successfully.
+  - Re-ran server build successfully.
+  - Checked for Chrome, Chromium, and Firefox; none are installed in this environment.
+  - Attempted to start the local app through `scripts/run-local.sh`.
+  - Startup failed inside the sandbox because local MySQL TCP access is blocked with `socket: operation not permitted`.
+  - Requested escalated startup for local MySQL/Redis runtime verification, but the approval service rejected the action because it returned `503 Service Unavailable`.
+  - Did not attempt an indirect workaround after the escalation rejection.
+- User verified that the v0.3 responsive adaptation slice works normally.
+- Created `docs/ai/16-v0.3-token-usage-slice-decision.md`.
+- Planned the v0.3 Token statistics first slice:
+  - Record model-returned token usage first.
+  - Show prompt, completion, and total token summaries.
+  - Defer real currency cost calculation and model price configuration to a later slice.
+  - Do not block successful chat replies when a provider omits `usage`.
+- Implemented the v0.3 Token usage statistics first slice:
+  - Extended AI replies to carry token usage.
+  - Parsed OpenAI-compatible `usage.prompt_tokens`, `usage.completion_tokens`, and `usage.total_tokens`.
+  - Added `token_usages` persistence.
+  - Recorded usage after successful normal AI replies and AI review replies when usage is available.
+  - Kept successful replies working when a provider omits `usage`.
+  - Added authenticated `/usage` route and `usage.html`.
+  - Added navigation entry for Token statistics.
+  - Displayed today's prompt/completion/total tokens.
+  - Displayed recent 7-day prompt/completion/total tokens.
+  - Displayed recent 7-day usage grouped by model.
+  - Kept real currency cost calculation, pricing configuration, price sync, and historical backfill out of this first slice.
+- Added tests for AI usage parsing, service-level usage recording, usage page rendering, and responsive usage page styling.
+- Fixed a user-reported v0.3 Token usage async recording bug:
+  - Symptom: AI replies were displayed, but the chat page appended system errors like `save token usage: authenticated user is required`.
+  - Symptom: the Token statistics page stayed at 0 after AI replies.
+  - Cause: `SendUserMessageAsync` created its background reply context from `context.Background()`, which dropped the authenticated user ID stored in the request context.
+  - Fix: background AI reply context now preserves `domain.WithUserID` while remaining detached from request cancellation.
+  - Added a regression test verifying async sends record Token usage with user context.
+- User verified that the v0.3 Token usage statistics first slice works normally.
+- User verified that the Token usage async context fix works normally.
+- v0.3/P2 is complete by the current roadmap and backlog:
+  - group chat topic guidance.
+  - reasoning effort configuration.
+  - Token usage statistics first slice.
+  - white/dark theme mode.
+  - desktop/mobile responsive adaptation.
+  - group chat history search and filtering.
+  - developer settings documentation.
+  - basic configuration/environment management.
+
+## Not Completed
+
+- Detailed production deployment configuration has not been defined.
+- WebSocket is not implemented; v0.2 first slice intentionally uses asynchronous send plus polling.
+- P2 frontend polish beyond the current chat page message, layout, avatar display, keyboard-send, topic-guidance, and theme-mode slices remains for later scoped work.
+- Browser-level verification for the v0.3 topic guidance slice has been completed by the user.
+- Real saved model API configuration and external model API connectivity could not be verified from this environment.
+- Browser-level verification for the Enter-to-send compatibility fix has been completed by the user.
+- Browser-level verification for the v0.3 theme mode slice has been completed by the user.
+- Production deployment configuration remains outside the current v0.3 documentation slice.
+- Browser-level verification for the v0.3 history search and filtering first slice has been completed by the user.
+- Browser-level verification for the v0.3 reasoning effort configuration slice has been completed by the user.
+- Runtime browser verification for the v0.3 responsive adaptation slice could not be completed in this environment because no browser is installed and local MySQL TCP access is blocked by the sandbox; user-side browser verification has been completed.
+- No remaining v0.3/P2 roadmap item is currently open.
+
+## Verified
+
+- The project directory exists at `/home/bird/Projects/ai_chat`.
+- The requested AI control document paths have been created.
+- `docs/ai/00-vision.md` has been created with the requested seven sections.
+- `docs/ai/01-scope.md` has been created with P0, P1, P2, P3, and Non-goals.
+- Non-P0 scope items have been reflected in `docs/ai/BACKLOG.md`.
+- `docs/ai/02-roadmap.md` has been created with v0.1, v0.2, v0.3, and v1.0.
+- v0.1 includes only P0 scope items.
+- Later versions include P1, P2, and P3 capabilities.
+- `docs/ai/03-mvp-contract.md` has been created.
+- The MVP contract requires a real web UI operation path and forbids reducing v0.1 to a pure backend demo or mock-only loop.
+- User confirmation for `docs/ai/03-mvp-contract.md` was received.
+- `docs/ai/04-skeleton.md` has been created and stays within v0.1 P0 scope.
+- `go test -mod=mod ./...` passed using the workspace module cache.
+- `go build -mod=mod -buildvcs=false ./cmd/server` passed.
+- Startup configuration now defaults to MySQL `root/4399` on `127.0.0.1:3306`, database `ai_chat`, and Redis `127.0.0.1:6379` with password `4399`.
+- Model settings now require supported models, and role creation validates selected models against that list.
+- Model settings check flow is covered by HTTP tests and returns fetched model choices to the page.
+- Service-level error output now includes role-specific AI reply failures when fewer than two AI replies succeed.
+- `/health` route is implemented and covered by HTTP route tests.
+- Service tests verified the two-role requirement and message persistence behavior.
+- HTTP/UI route test verified the form-based MVP operation path through Gin handlers.
+- User verified the v0.1 browser main path successfully.
+- `docs/ai/06-v0.2-decision.md` has been created.
+- v0.2 first implementation slice has a concrete behavior boundary and acceptance checks.
+- v0.2 first slice explicitly excludes file upload, tools, token statistics, public community, AI role editing, speaking permission switch, login, and multi-API management.
+- `go test -mod=mod ./...` passed after v0.2 first-slice implementation.
+- `go build -mod=mod -buildvcs=false ./cmd/server` passed after v0.2 first-slice implementation.
+- `go test -mod=mod ./...` passed after fixing the async-send empty-content bug.
+- `go build -mod=mod -buildvcs=false ./cmd/server` passed after fixing the async-send empty-content bug.
+- User verified in the local browser that async message sending no longer returns `validation error: message content is required` when the message textarea is filled.
+- User verified in the local browser that AI role deletion works.
+- User verified in the local browser that AI replies are generated after sending a message.
+- User verified in the local browser that group chat deletion works.
+- User confirmation that “can automatically answer” is treated as verification of automatic AI reply append when the reply appears in the current chat page without manual refresh.
+- User explicitly verified that AI reply automatic append works normally.
+- `docs/ai/07-v0.2-second-slice-decision.md` has been created.
+- v0.2 second slice has a concrete behavior boundary and acceptance checks.
+- `go test -mod=mod ./...` passed after v0.2 second-slice implementation.
+- `go build -mod=mod -buildvcs=false ./cmd/server` passed after v0.2 second-slice implementation.
+- Service tests verified:
+  - editing a role persists name, persona, reply style, model, and speaking permission.
+  - muted roles do not participate in replies.
+  - re-enabled roles can participate again.
+  - sending is blocked when fewer than two roles have speaking permission.
+- HTTP tests verified:
+  - role edit route persists updated data.
+  - speaking permission toggle updates the page state.
+  - async sending is blocked when fewer than two roles can speak.
+  - re-enabled roles can reply through the existing async message flow.
+- User verified in the local browser that all current functions are normal after v0.2 second-slice implementation.
+- User-side verification covers AI role editing and speaking permission switch.
+- `docs/ai/08-v0.2-third-slice-decision.md` has been created.
+- `go test -mod=mod ./...` passed after v0.2 third-slice implementation.
+- `go build -mod=mod -buildvcs=false ./cmd/server` passed after v0.2 third-slice implementation.
+- `go test -mod=mod ./...` passed after fixing the AI review append polling issue.
+- `go build -mod=mod -buildvcs=false ./cmd/server` passed after fixing the AI review append polling issue.
+- `go test -mod=mod ./...` passed again during the current verification handoff round.
+- `go build -mod=mod -buildvcs=false ./cmd/server` passed again during the current verification handoff round.
+- User verified in the local browser that v0.2 AI review behavior now succeeds after the polling fix.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after implementing login and account isolation.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after implementing login and account isolation.
+- User verified in the local browser that login, data isolation, and the original chat main path after re-login are normal.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after implementing complete API management.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after implementing complete API management.
+- User verified in the local browser that complete API management works normally.
+- Service tests verified:
+  - roles can bind to different model API configs.
+  - sending a message works when roles use their selected model configs.
+  - deleting a model config that is still used by a role is blocked.
+- HTTP tests verified:
+  - multiple model API configs can be saved under one account.
+  - saved API configs are listed on the model settings page.
+  - chat detail page shows combined API config/model choices for role creation.
+  - unused API configs can be deleted.
+  - used API configs cannot be deleted.
+  - existing MVP/v0.2 HTTP paths still work after multiple API config support.
+- `docs/ai/09-v0.3-first-slice-decision.md` has been created.
+- v0.3 first slice is explicitly limited to message presentation and does not require backend business changes.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after implementing chat-like message presentation.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after implementing chat-like message presentation.
+- HTTP tests verified:
+  - historical message pages include the new chat-like message markup.
+  - existing MVP/v0.2 route behavior still works after the presentation update.
+- User verified that the v0.3 chat-like message content is normal in the browser.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after implementing centered chat layout with sidebars.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after implementing centered chat layout with sidebars.
+- HTTP tests verified:
+  - chat detail pages include the centered workspace, left role sidebar, main chat area, right settings sidebar, and collapsible settings menu markup.
+  - existing MVP/v0.2 route behavior still works after the layout update.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after implementing collapsed side menus, simplified send button, sidebar/chat color contrast, and AI role avatar text/image-URL support.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after implementing collapsed side menus, simplified send button, sidebar/chat color contrast, and AI role avatar text/image-URL support.
+- Service tests verified:
+  - role avatar text can be persisted through role editing.
+- HTTP tests verified:
+  - chat detail pages include avatar markup for role cards and messages.
+  - chat detail pages include the avatar text/image URL input.
+  - chat detail pages can render image URL avatars.
+  - the send button renders as “发送”.
+  - existing MVP/v0.2 route behavior still works after the UI refinement update.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after the latest visual refinement.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after the latest visual refinement.
+- HTTP tests verified:
+  - centered chat workspace and avatar input markup still render.
+  - deleting an AI role removes role controls while preserving historical messages.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after replacing avatar URL entry with local avatar upload.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after replacing avatar URL entry with local avatar upload.
+- HTTP tests verified:
+  - chat detail pages render `multipart/form-data` role forms.
+  - chat detail pages render local avatar file inputs.
+  - old URL-copy avatar text no longer appears in the UI.
+- User verified that the P2 frontend experience optimization is normal in the local browser.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after implementing Enter-to-send.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after implementing Enter-to-send.
+- HTTP tests verified:
+  - chat detail pages show the keyboard shortcut help text for Enter-to-send and Shift + Enter newline behavior.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed again during the Enter-to-send verification handoff.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed again during the Enter-to-send verification handoff.
+- The real local service started successfully after escalation:
+  - MySQL database check reached `root@tcp(127.0.0.1:3306)/ai_chat`.
+  - Redis check reached `127.0.0.1:6379 db 0`.
+  - Server listened on `:8080`.
+- Local HTTP verification against the running service confirmed:
+  - `/login` returned HTTP 200.
+  - temporary registration redirected to `/chats`.
+  - temporary chat creation redirected to `/chats/3`.
+  - the chat detail page rendered the shortcut help text and async send form.
+  - temporary chat deletion and logout both redirected successfully.
+- User verified in the local browser that the Enter-to-send shortcut works normally.
+- `docs/ai/10-v0.3-topic-slice-decision.md` has been created.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after implementing topic guidance.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after implementing topic guidance.
+- Service tests verified:
+  - chat topics are trimmed and persisted.
+  - topic length over 500 characters is rejected.
+- HTTP tests verified:
+  - chat detail pages include the topic guidance UI.
+  - `POST /chats/:chatID/topic` saves the topic and renders the topic summary.
+  - topic length validation is surfaced through the chat page.
+- AI prompt tests verified:
+  - normal reply system prompts include the chat topic.
+  - review system prompts include the chat topic.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed during the model API connection diagnosis.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed during the model API connection diagnosis.
+- Static diagnosis verified:
+  - model connection check uses OpenAI-compatible `/models`.
+  - chat reply generation uses OpenAI-compatible `/chat/completions`.
+  - base URL is trimmed of trailing `/`, then endpoint suffixes are appended.
+  - missing base URL, missing API key, empty model list, non-2xx model API responses, and malformed JSON responses all return explicit errors.
+- User reported that the model API is now normal.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after the Enter-to-send compatibility fix.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after the Enter-to-send compatibility fix.
+- HTTP tests verified:
+  - chat detail pages render `data-enter-submit="true"` on the message textarea.
+- User verified in the local browser that the Enter-to-send compatibility fix works normally.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed while attempting the next `README`/`NEXT` step.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed while attempting the next `README`/`NEXT` step.
+- User verified in the local browser that v0.3 topic guidance works normally.
+- `docs/ai/11-v0.3-theme-mode-slice-decision.md` has been created.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after implementing theme mode.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after implementing theme mode.
+- HTTP tests verified:
+  - chat detail page includes theme toggle markup and `theme.js`.
+  - chat list, chat detail, model settings, and health pages include theme toggle markup and `theme.js`.
+- User verified in the local browser that v0.3 theme mode works normally.
+- `docs/ai/12-v0.3-developer-settings-decision.md` has been created.
+- `.env.example` has been created.
+- `docs/ai/developer-settings.md` has been created.
+- `README.md` links to `docs/ai/developer-settings.md`.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after developer settings documentation changes.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after developer settings documentation changes.
+- Service tests verified:
+  - registration normalizes email.
+  - duplicate registration is rejected.
+  - login creates a usable session.
+  - logout invalidates the session.
+- HTTP tests verified:
+  - unauthenticated users are redirected to `/login`.
+  - registration creates a session and allows access to `/chats`.
+  - logout clears access to protected pages.
+  - login restores access.
+  - different users cannot see each other's chats.
+  - direct access to another user's chat returns not found.
+  - existing MVP/v0.2 chat, role, async reply, deletion, role editing, speaking permission, and AI review HTTP paths still work after login.
+- Service tests verified:
+  - AI review disabled keeps normal first-round-only replies.
+  - AI review enabled adds at most 2 review replies after first-round replies.
+- HTTP tests verified:
+  - chat detail page shows AI review disabled state.
+  - AI review can be enabled from the chat detail page.
+  - async message updates include first-round replies and AI review replies when enabled.
+- Service tests verified:
+  - deleting an AI role removes it from future reply participation.
+  - sending with fewer than two remaining AI roles is blocked.
+  - incremental message reads return only newer messages.
+- HTTP tests verified:
+  - v0.1 form-based main path still works.
+  - async message send returns a saved user message.
+  - AI replies can be fetched through the message update endpoint.
+  - deleting an AI role removes the role controls while preserving history.
+  - deleting a group chat removes it from the list.
+  - accessing a deleted group chat returns not found.
+
+## Not Verified
+
+- Real MySQL migration and persistence against a running MySQL service.
+- Real Redis connectivity against a running Redis service.
+- Direct verification from this execution environment against the user's local MySQL and Redis.
+- Playwright click test from this execution environment.
+- Real browser keyboard event test from this execution environment.
+- Deployment target.
+- Real model API behavior through the asynchronous background reply path.
+- Saved model API config rows in the user's local MySQL database during this diagnosis.
+- v0.1 main-path regression check after v0.2 first-slice verification has not been restated explicitly after the latest changes.
+- Real MySQL migration of existing `roles` table with the new `can_speak` column in the user's local database.
+- Real MySQL migration of existing `chats` table with the new `ai_review_enabled` column in the user's local database.
+- Real MySQL migration of existing `users`, `sessions`, `chats.user_id`, and `model_configs.user_id` in the user's local database.
+- Real MySQL migration of existing `model_configs.name` and `roles.model_config_id` in the user's local database.
+- Real MySQL migration of existing `roles.avatar` in the user's local database.
+- Real MySQL migration of existing `chats` table with the new `topic` column in the user's local database.
+- v0.3 theme mode UI in a real browser.
+- Real model API behavior with topic-injected prompts.
+- Real `/models` connectivity for saved model API configs.
+- Real `/chat/completions` connectivity for saved role model configs.
+- User review of `docs/ai/developer-settings.md`.
+
+## Blockers
+
+- User reported MySQL is listening on `127.0.0.1:3306` and MySQL/Redis password is `4399`.
+- User-run startup output shows MySQL and Redis checks reached successfully; current user-side failure is port `8080` already in use.
+- Application-level connection configuration issue has been fixed; remaining failure is the execution sandbox socket restriction.
+- Current sandbox cannot create local TCP sockets for MySQL or Redis verification:
+  - MySQL: `ERROR 2004 (HY000): Can't create TCP/IP socket (1)`.
+  - Redis: `Can't create socket: Operation not permitted`.
+- Escalated local TCP verification requests for `mysql` and `redis-cli` were not approved because the approval service returned 503.
+- Escalated MySQL config inspection during model API diagnosis was not approved because the approval service returned 502.
+- Escalated local app startup during topic guidance verification was not approved because the approval service returned 502.
+- Real Redis and model services are not verified from this environment.
+- Temporary build binary `server` remains in the workspace because deletion approval failed; it is ignored by `.gitignore`.
+- Chrome, Chromium, and Firefox executables are not available in this environment, so browser keyboard automation cannot be run here.
+
+## Deliverable Status
+
+v0.3 developer settings documentation deliverable; user-side review still required.
+
+Reason: automated tests and build pass, and the slice is limited to documentation plus `.env.example`. It does not change runtime behavior. The remaining acceptance evidence is user review that the document is sufficient for local setup and troubleshooting.
+
+## Next Recommendation
+
+Review `docs/ai/developer-settings.md` and `.env.example` against the user's local setup: confirm the documented MySQL, Redis, port, upload, model API, theme, and troubleshooting instructions are accurate enough to use.
+
+## Ongoing Rule
+
+At the end of every future task round, update all three control documents:
+
+- `docs/ai/STATUS.md`
+- `docs/ai/NEXT.md`
+- `docs/ai/BACKLOG.md`
