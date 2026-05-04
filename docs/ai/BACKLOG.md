@@ -1,95 +1,38 @@
 # AI Coding Backlog
 
-## Roadmap Mapping
+## Status
 
-- v0.2 可用版承接 P1。
-- v0.3 增强版承接 P2。
-- v1.0 稳定版承接 P3 中适合进入稳定产品的能力。
-- `docs/ai/02-roadmap.md` 是版本边界的当前来源。
-- `docs/ai/03-mvp-contract.md` 是 v0.1 实现边界的当前来源；非 P0 需求不得进入 v0.1。
-- `docs/ai/04-skeleton.md` 是 v0.1 编码前系统骨架的当前来源。
-- `docs/ai/05-mvp.md` 是 v0.1 当前实现和验证记录。
-- `docs/ai/06-v0.2-decision.md` 是 v0.2 第一切片的当前行为决策来源。
+MVP V1.0 is complete and accepted. No active backlog item blocks the current release.
 
-## P0 Runtime Verification
+## Closed Scope
 
-- v0.1 主路径已由用户确认成功。
-- 清理或忽略临时构建产物 `server`；该文件已加入 `.gitignore`。
+- AI group chat main path
+- account login and account isolation
+- model API management and per-role model routing
+- AI role lifecycle and speaking controls
+- async replies and no-refresh chat flow
+- AI review / mutual review
+- chat topic guidance
+- responsive chat UI and theme mode
+- history filtering
+- Token usage statistics
+- supported file upload and AI file-context analysis
+- controlled built-in tools
+- deployment, CI, developer settings, and observability documentation
 
-## P1
+## Optional Future Enhancements
 
-- 用户登录与账号数据隔离。状态：v0.2 登录切片已实现，并已由用户本机浏览器验证通过。
-- 完整 API 管理，包括多个 API、模型和账号绑定关系。状态：v0.2 API 管理切片已实现，并已由用户本机浏览器验证通过。
-- AI 角色删除。状态：v0.2 第一切片已实现，并已由用户本机浏览器验证通过。
-- AI 角色编辑和发言权限开关。状态：v0.2 第二切片已实现，并已由用户本机浏览器验证通过。
-- 群聊删除。状态：v0.2 第一切片已实现，并已由用户本机浏览器验证通过。
-- 稳定实时或类实时消息体验，优先解决发送消息后整页刷新和卡顿问题；v0.2 第一切片先采用异步发送和局部更新，不立即引入 WebSocket。状态：已实现，用户已验证 AI 可以在聊天流中自动回答，且回复自动追加功能正常。
-- v0.2 异步发送空内容误报 bug。状态：已修复，并已由用户本机复测通过。原因是前端在构造 `FormData` 前禁用了输入框。
-- AI 角色之间的补充或反驳。状态：v0.2 第三切片已实现，并已由用户本机浏览器验证通过。
-- AI 互评回答更像真人群聊接话。状态：prompt-only 优化已实现并通过自动测试/构建；互评 prompt 现在要求选择一个最值得回应的观点，自然认同、补充、追问、指出风险或温和反驳，并避免逐条总结全场和报告式表达；真实模型输出质量待用户浏览器验收。
-- AI 群聊减少机械式固定互评。状态：互评最多追加一个自然跟进已实现并通过自动测试/构建；短消息不触发互评的策略已按用户反馈移除，现在只要互评开关开启且首轮至少两个 AI 回复成功，就追加一条互评；“三个以上可发言角色时首轮只选择两个角色回复”的策略已按用户反馈回滚，首轮恢复为所有允许发言角色都回答。后续可继续增强为模型判断“是否需要接话”，但不能破坏用户期望的全员首轮回复和可验证互评。
-- AI 互评当前页可见性。状态：已修复并通过自动测试/构建；互评开启时前端轮询现在等待“可发言角色数 + 1 条互评”，避免首轮回复完成后过早停止；聊天页静态资源版本已更新到 `20260504a`，真实浏览器待用户复测。
-- AI 回复速度和聊天底部状态文案。状态：已实现并通过自动测试/构建；首轮所有允许发言 AI 角色现在并发请求模型，保存消息仍保持角色顺序；聊天底部状态不再显示“AI 正在回复，随后进行互评...”，统一为“AI 正在回复...”；聊天页静态资源已加版本参数避免浏览器继续使用旧 `chat.js`；真实供应商延迟改善待用户浏览器验收。
-- v0.2 AI 互评开启后页面未追加互评回复 bug。状态：已修复，原因是前端第一轮 AI 回复完成后提前停止轮询；已由用户本机复测通过。
-- MVP 级验收与基础测试。状态：已新增 v0.2 第一切片、第二切片和第三切片服务层、HTTP 自动测试。
-- 技术栈和项目结构选择。
+These are intentionally not part of the accepted MVP V1.0 closeout:
 
-## v0.2 Completion
+- file delete, download, preview, OCR, complex PDF extraction, vector retrieval, or long-term knowledge base
+- model automatic tool calling
+- tool permission approvals and richer tool audit flows
+- provider failover, load balancing, cost routing, and non-OpenAI-compatible SDK support
+- structured logs, request IDs, metrics, alerts, tracing, and external error reporting
+- browser E2E automation
+- production-grade secret management
+- public community, multiplayer realtime collaboration, plugin market, or role marketplace
 
-- v0.2 P1 当前已完成并通过用户本机验证。
-- 后续新功能默认从 v0.3/P2 中选择；P3 不进入 v0.3 首个切片。
+## Current Rule
 
-## P2
-
-- 群聊主题引导。状态：v0.3 主题引导切片已实现，支持在群聊详情页保存/清空主题，并将主题注入普通 AI 回复和 AI 互评 prompt；自动测试与构建通过，用户已确认功能正常。
-- 思考强度配置。状态：v0.3 角色级思考强度切片已实现，角色创建/编辑支持默认、低、中、高；默认不向模型请求体传递额外参数，低/中/高会在 OpenAI-compatible `/chat/completions` 请求体中传递 `reasoning_effort`；自动测试与构建通过，用户已确认功能正常。
-- Token 花费统计面板。状态：v0.3 第一切片已实现，记录模型返回的 Token usage，基础统计面板展示今天、最近 7 天和按模型汇总的 prompt/completion/total token；真实金额计算、价格配置和供应商价格同步暂缓；已修复异步 AI 回复记录 usage 时丢失认证用户上下文导致 `authenticated user is required` 的问题；自动测试与构建通过，用户已确认功能正常。
-- 白天和黑夜模式。状态：v0.3 主题模式切片已实现代码，主要页面提供白天/黑夜切换按钮，默认跟随系统偏好，并使用 `localStorage` 保存浏览器选择；自动测试与构建通过，用户已确认功能正常。
-- 更好的桌面端与移动端适配。状态：v0.3 聊天详情页响应式适配切片已实现，降低三栏布局横向溢出风险，优化平板/手机宽度下的主聊天区优先级、顶部导航换行、消息气泡、头像、发送表单触控尺寸和移动端发送区可达性；自动测试与构建通过，用户已确认功能正常。
-- 前端交互和视觉 polish。状态：聊天详情页居中布局、居中群聊标题、左右侧栏、侧栏默认收纳、发送按钮简化、设置区/聊天区色差、本地 AI 角色头像图片上传与展示、整体配色和间距优化已实现并由用户确认 P2 前端测试体验正常；Enter 发送、Shift + Enter 换行已实现，用户反馈 plain Enter 仍换行后已增强为捕获阶段监听 `keydown`/`keypress` 并兼容 `key`/`code`/`keyCode`/`which`，用户已确认功能正常；更广泛的全站视觉优化仍待后续切片。
-- 消息显示队列优化为更接近真实聊天页面的效果：每条消息按发送者身份展示为聊天气泡或等价结构，用户消息与不同 AI 角色消息有清晰的视觉区分，消息流阅读体验接近真人群聊。状态：v0.3 第一切片已实现代码，用户确认内容正常；视觉布局与 AI 角色头像展示已继续进入聊天详情页 UI refinement 切片。
-- 群聊历史检索、筛选和管理。状态：v0.3 第一切片已实现，支持在群聊详情页对当前已加载消息进行关键词搜索，并按全部、用户、AI、系统发送者类型筛选；无匹配时显示空状态，清空按钮可恢复正常列表；自动测试与构建通过，用户已确认功能正常。
-- 开发者设置文档。状态：v0.3 开发者设置文档切片已实现并完成一致性审阅；`docs/ai/developer-settings.md` 覆盖本地服务、环境变量、启动、MySQL、Redis、模型 API、上传、浏览器设置和常见故障；文档内容已对照当前代码和脚本检查。
-- 配置和环境管理。状态：新增 `.env.example`，覆盖当前支持的主要环境变量；`README.md` 已指向开发者设置文档；已确认 run-local 默认值、端口选择和上传目录说明与代码一致；更完整的部署级配置管理仍待后续版本。
-- 模型 API 连接诊断。状态：代码路径检查、自动测试和构建通过；当前实现的检测连接走 OpenAI-compatible `GET {base_url}/models`，聊天回复走 `POST {base_url}/chat/completions`；用户已反馈模型 API 正常。
-- 模型 API TLS 握手超时重试。状态：已实现模型 API 可配置超时、TLS 握手超时、瞬时网络错误重试和中文超时提示；异步 AI 回复背景上下文延长到 5 分钟；自动测试和构建通过；本地服务已通过提升权限连通 MySQL/Redis，并完成登录、临时账号、群聊创建/删除 HTTP 主路径验证；用户已反馈主机功能正常。
-- AI 互评开关整页刷新 bug。状态：已修复；AI 互评开关在支持 `fetch` 的浏览器中改为 JSON 异步切换并局部更新状态，保留普通表单重定向兜底；自动测试、构建和本地 HTTP JSON 验证通过，用户侧浏览器视觉复测待确认。
-
-## v0.3 Completion
-
-- v0.3/P2 当前已完成并通过用户本机验证。
-- 后续新功能默认从 v1.0/P3 中选择。
-
-## P3
-
-- 文件上传与 AI 文件分析。状态：v1.0 第一切片已实现并通过自动测试/构建；支持受控文本文件、`.docx`、基础文本型 `.pdf` 从本机直接上传、保存、列表展示，并将文件文本注入普通 AI 回复和 AI 互评 prompt；已补本地文件选择、拖拽上传、选择后自动上传和黑夜模式可读性修复；用户本机浏览器真实上传和真实模型分析待验证。后续仍需文件删除、下载/预览、OCR、复杂 PDF 解析、向量检索或长期知识库等增强。
-- 工具调用能力。状态：v1.0 受控工具第一切片已实现并通过自动测试/构建；支持用户手动运行当前时间、文本统计、四则计算三个内置工具，成功和失败均生成系统消息并记录执行状态；本地 HTTP 工具执行验证通过，用户本机浏览器真实工具执行待确认。后续仍需模型自动 tool calling、工具权限审批、更丰富工具和审计增强。
-- 多供应商、多模型高级路由。状态：v1.0 最小路由闭环已实现并通过自动测试/构建；设置页和角色卡片显示路由编号、供应商、配置名称、Base URL 和模型；普通回复与 AI 互评服务测试验证按角色绑定路由执行。后续自动故障转移、成本路由、负载均衡和非 OpenAI-compatible 供应商 SDK 不在本切片。
-- 公开社区或多人实时协作聊天室。
-- 插件或角色市场。
-- 部署文档。状态：v1.0 部署文档切片已完成；新增 `docs/ai/deployment.md`，并从 README 和开发者设置文档链接；覆盖构建、服务依赖、环境变量、持久化目录、进程管理、反向代理/TLS、健康检查、备份和回滚；自动测试和构建通过；未实际部署生产环境。
-- 可观测性、日志和错误报告策略。状态：v1.0 最小切片已完成；新增 `docs/ai/observability.md`；HTTP error、chat action error、async AI reply error 输出标准库日志；自动测试和构建通过。后续结构化日志、request ID、metrics、alerting 和外部错误报告集成未实现。
-- CI 检查。状态：v1.0 最小切片已完成；新增 `scripts/ci-check.sh`、`.github/workflows/ci.yml` 和 `docs/ai/ci.md`；本地 CI 脚本运行测试和构建并通过；远端 GitHub Actions 需推送后验证。
-
-## v1.0 Completion
-
-- v1.0 当前达到最小代码/文档闭环：文件分析、受控工具、多供应商/多模型路由、部署文档、可观测性策略和 CI 检查均有实现或文档证据。
-- 用户侧仍需最终验收：真实浏览器、真实模型供应商、部署文档适配、远端 GitHub Actions。
-- 后续增强不阻塞 v1.0 最小闭环：文件删除/预览/OCR/向量检索、模型自动 tool calling、自动故障转移、结构化日志、metrics/alerting、浏览器 E2E、生产级密钥管理。
-
-## Non-goals
-
-- 通用社交 IM。
-- 公开大型聊天室。
-- 模型训练、微调或模型托管。
-- MVP 中的文件分析、工具调用和 Token 统计。
-- MVP 中的复杂权限体系。
-- 产品范围未确认前写业务代码。
-
-## Ongoing Rule
-
-Every future task round must end by updating:
-
-- `docs/ai/STATUS.md`
-- `docs/ai/NEXT.md`
-- `docs/ai/BACKLOG.md`
+Do not implement future enhancements unless the user opens a new task.
