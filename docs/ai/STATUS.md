@@ -1,12 +1,28 @@
 # AI Coding Status
 
+## Current Task Type
+
+优化 / 交付收口验证
+
+## Current Mode
+
+Heavy
+
 ## Current Phase
 
-v0.3 completed.
+S5 Handoff after AI review polling fix.
 
 ## Current Goal
 
-Prepare v1.0 planning from the remaining P3 scope.
+Stop for user acceptance checks after AI review polling fix.
+
+## Current Deliverability
+
+Deliverable for v1.0 minimum closure plus AI review polling fix: roadmap implementation/documentation criteria have current evidence; the AI quality and responsiveness slices have automated test/build evidence. Remaining checks are user-side/browser/production/remote-CI validation and real-model qualitative review.
+
+## External Decision Required
+
+External user acceptance is required before calling the release fully accepted in the user's environment. Real-model acceptance is also required to confirm AI review is now visible after first-round replies.
 
 ## Completed
 
@@ -595,6 +611,166 @@ Prepare v1.0 planning from the remaining P3 scope.
 - `README.md` links to `docs/ai/developer-settings.md`.
 - `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after developer settings documentation changes.
 - `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after developer settings documentation changes.
+- Created `docs/ai/03-contract.md` for the current v1.0 file upload slice.
+- Created `docs/ai/05-build.md`, `docs/ai/06-qa.md`, `docs/ai/07-risks.md`, and `docs/ai/08-handoff.md` for the current auto-execution handoff.
+- Implemented the v1.0 file upload and AI file analysis first slice:
+  - Added `domain.ChatFile` and chat detail file listing.
+  - Added MySQL `chat_files` table and Store methods for creating and listing chat files.
+  - Added `POST /chats/:chatID/files`.
+  - Added chat-page “文件资料” upload panel and uploaded-file list.
+  - Supported `txt`, `md`, `json`, `csv`, `log`, `docx`, and text-based `pdf` files up to 10MB.
+  - Added `.docx` text extraction from Office Open XML.
+  - Added basic text-based PDF extraction without external binaries; scanned PDFs remain unsupported.
+  - Extended the file input `accept` list so the browser local file picker can select `.docx` and `.pdf`.
+  - Clarified the UI around direct local upload and added a drag-and-drop upload zone.
+  - Fixed the local upload interaction so selecting or dragging a file submits the upload immediately and shows an uploading state.
+  - Improved dark-mode contrast for the upload zone label, selected-file text, and file input.
+  - Saved chat analysis files by default under non-public `data/chat-files`.
+  - Added `CHAT_FILE_DIR` to `.env.example` and README.
+  - Injected uploaded file text into normal AI reply and AI review system prompts.
+  - Limited injected file context to 12000 rune.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after v1.0 file upload slice implementation.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after v1.0 file upload slice implementation.
+- Service tests verified:
+  - uploaded chat files are stored and returned on chat detail.
+  - uploaded chat files are passed into AI reply inputs.
+- AI tests verified:
+  - file context includes uploaded file names and text.
+  - OpenAI-compatible request system prompt includes uploaded file content.
+- HTTP tests verified:
+  - chat detail page renders the file upload panel, `chat_file` input, route `/chats/:chatID/files`, and supported-file instructions.
+  - upload UI advertises `.docx`, `.pdf`, direct local upload, drag-and-drop, and scanned PDF limitations.
+  - upload UI includes file upload form markers used by the auto-submit script.
+- Extractor tests verified:
+  - `.docx` text can be extracted.
+  - basic text-based PDF literal text can be extracted.
+- User verified in the local browser that file upload succeeds.
+- v1.0 file upload and AI file analysis first slice is complete by current acceptance.
+- Implemented the v1.0 controlled tools slice:
+  - Added `domain.ToolExecution` and `ChatDetail.Tools`.
+  - Added MySQL `tool_executions` table and Store methods for creating and listing tool executions.
+  - Added built-in controlled tools: current time, text statistics, and arithmetic calculator.
+  - Added service-level tool execution with explicit whitelist and no shell, no network, no arbitrary file access.
+  - Tool success and failure both create visible system messages.
+  - Added `POST /chats/:chatID/tools`.
+  - Added chat-page “受控工具” panel and recent execution list.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after v1.0 controlled tools slice implementation.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after v1.0 controlled tools slice implementation.
+- Service tests verified:
+  - calculator tool success stores result and system message.
+  - calculator failure stores failed status and error system message.
+- HTTP tests verified:
+  - controlled tools UI renders.
+  - calculator execution route stores and displays result.
+- Fixed a user-reported AI reply timeout bug:
+  - Symptom: async chat showed `AI 回复未完成` with `TLS handshake timeout` for multiple roles.
+  - Cause: model API transient TLS/network timeout was not retried and the raw Go transport error was surfaced directly.
+  - Added configurable model API HTTP timeout, TLS handshake timeout, retry attempts, and retry backoff.
+  - Added retry handling for transient model API network errors.
+  - Replaced final TLS timeout errors with clearer Chinese guidance.
+  - Increased async background reply context from 2 minutes to 5 minutes so multiple role calls can survive retry.
+  - Added `.env.example` and developer documentation for `MODEL_API_TIMEOUT_SECONDS`, `MODEL_API_TLS_HANDSHAKE_TIMEOUT_SECONDS`, `MODEL_API_RETRY_ATTEMPTS`, and `MODEL_API_RETRY_BACKOFF_MS`.
+- `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...` passed after the model API timeout retry fix.
+- `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server` passed after the model API timeout retry fix.
+- AI client tests verified:
+  - transient TLS timeout is retried and can succeed on a later attempt.
+  - repeated TLS timeout returns a readable Chinese error with retry count and base URL guidance.
+- Re-read `/home/bird/Documents/AI_AUTO_MODE_EXECUTION_PROMPT.md` and followed its S0 -> S4 -> S5 control flow for the current verification task.
+- Confirmed there is no `START.md` or start document in the repository; `docs/ai/NEXT.md` remains the only current unique recommendation source.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...`; it passed.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server`; it passed.
+- Implemented the v1.0 deployment documentation slice:
+  - Added `docs/ai/deployment.md`.
+  - Covered target self-hosted deployment shape.
+  - Covered binary build command and artifact layout assumptions.
+  - Covered MySQL, Redis, and OpenAI-compatible model API service requirements.
+  - Covered production environment variables, persistent upload/chat-file directories, and secret handling.
+  - Covered process manager/systemd example.
+  - Covered reverse proxy/TLS and upload body size notes.
+  - Covered startup verification through `/login`, `/health`, model settings, chat, file upload, and controlled tools.
+  - Covered backup, restore, and rollback basics.
+  - Linked the deployment guide from `README.md` and `docs/ai/developer-settings.md`.
+- Checked deployment documentation references against current code and `.env.example`.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...`; it passed after deployment documentation changes.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server`; it passed after deployment documentation changes.
+- Implemented the v1.0 observability/logging/error-reporting strategy slice:
+  - Added `docs/ai/observability.md`.
+  - Added `http_error` logging for generic error page rendering.
+  - Added `chat_action_error` logging for key chat-page action failures.
+  - Added chat action logging to AI review toggle, topic save, file upload, tool run, async send, message updates, and chat-error detail failures.
+  - Added `async_ai_reply_error` logging when background AI replies fail or fewer than two AI replies succeed.
+  - Kept logs on standard stdout/stderr with no external service dependency.
+  - Documented no-secret logging rules.
+- Added HTTP test coverage that verifies chat action errors are logged with action, chat ID, and status.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./internal/http`; it passed.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...`; it passed after observability changes.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server`; it passed after observability changes.
+- Implemented the v1.0 CI checks slice:
+  - Added `scripts/ci-check.sh`.
+  - Added `.github/workflows/ci.yml`.
+  - Added `docs/ai/ci.md`.
+  - Updated README with the local check command.
+  - CI gate runs `go test -mod=mod ./...` and `go build -mod=mod -buildvcs=false ./cmd/server`.
+  - CI gate does not require secrets, MySQL, Redis, model API, browser automation, or deployment.
+- Ran `sh scripts/ci-check.sh`; it passed.
+- Performed final v1.0 roadmap review against `docs/ai/02-roadmap.md`.
+- Mapped each v1.0 completion criterion to current evidence:
+  - supported file upload and AI analysis: implemented for text, markdown, json, csv, log, docx, and text-based pdf; tests/build pass; user previously confirmed file upload succeeds; full real model analysis remains user-side.
+  - controlled tools: implemented for current time, text statistics, and calculator; tests/build pass; local HTTP tool execution verified; browser visual check remains user-side.
+  - multi-provider/multi-model routing: minimum closure implemented through visible route metadata and per-role config/model binding tests for normal replies and AI review.
+  - deployment docs: `docs/ai/deployment.md` exists and is linked from README/developer settings.
+  - observability/logging/error strategy: `docs/ai/observability.md` exists; `http_error`, `chat_action_error`, and `async_ai_reply_error` logs implemented; tests/build pass.
+  - CI checks: `scripts/ci-check.sh`, `.github/workflows/ci.yml`, and `docs/ai/ci.md` exist; local CI script passes.
+  - product scope: product remains AI multi-role group chat; no generic social IM, model hosting, unrestricted command execution, or public plugin market was added.
+- Confirmed Chrome, Chromium, and Firefox are not installed in this execution environment.
+- Attempted to start the app inside the sandbox; startup failed because local MySQL TCP socket creation is blocked.
+- Started the app with approved elevated local access:
+  - MySQL database check reached `root@tcp(127.0.0.1:3306)/ai_chat`.
+  - Redis check reached `127.0.0.1:6379 db 0`.
+  - Server listened on `http://localhost:8080`.
+- Verified the running local service by HTTP:
+  - `GET /login` returned HTTP 200.
+  - A temporary verification account was registered successfully.
+  - `GET /chats` returned HTTP 200 for the temporary account.
+  - A temporary chat was created successfully and redirected to `/chats/5`.
+  - The temporary chat was deleted successfully.
+  - The temporary session was logged out successfully.
+- Stopped before real AI reply verification because the temporary account does not have the user's saved model API configuration, and this environment cannot perform the required local browser observation.
+- User reported on the host machine that the current functionality is normal, which is treated as clearing the model API timeout retry user-side verification gate.
+- Fixed a user-reported AI review toggle UX regression:
+  - Symptom: enabling AI supplement/rebuttal refreshed the whole page.
+  - Cause: the AI review toggle form posted to `/chats/:chatID/ai-review` and always received a `302` redirect.
+  - Fix: the route now returns JSON when the request accepts JSON, while preserving the original no-JS form redirect fallback.
+  - Fix: `chat.js` intercepts the AI review toggle form, posts it with `fetch`, and updates the page status, sidebar status, hidden next value, button label, and `data-ai-review-enabled` without reloading.
+  - Fix: chat send polling now immediately uses the new in-page AI review state after the async toggle.
+- Added HTTP regression coverage for the AI review toggle:
+  - the chat page renders async AI review toggle markers.
+  - normal form submission still redirects.
+  - JSON submission returns `200 OK` with the updated `ai_review_enabled` state.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./internal/http`; it passed.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...`; it passed.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server`; it passed.
+- Started the app with approved elevated local access on `http://localhost:8081` because `8080` was occupied.
+- Verified the running local service by HTTP:
+  - temporary registration succeeded.
+  - temporary chat creation succeeded.
+  - `POST /chats/6/ai-review` with `Accept: application/json` returned `200 OK` and `{"ai_review_enabled":true,...}` instead of a redirect.
+  - calculator tool execution returned the expected form redirect path.
+  - temporary chat cleanup and logout succeeded.
+- Implemented the v1.0 multi-provider/multi-model routing minimum closure:
+  - Reused existing multiple model API configs and role `model_config_id` binding.
+  - Added explicit route metadata on the model settings page: route ID, provider, default model, model count, and Base URL.
+  - Added explicit route metadata on role cards: route ID, config name, provider, and selected model.
+  - Updated role create/edit model choices to show route ID and config name.
+  - Added `configByID` template helper for route display.
+  - Kept existing OpenAI-compatible client architecture, account isolation, async replies, AI review, file context, Token usage, and controlled tools unchanged.
+- Added service tests proving normal AI replies use each role's selected model config route.
+- Added service tests proving AI review calls use each role's selected model config route.
+- Added HTTP tests proving route metadata appears on settings and chat pages.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./internal/app`; it passed.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./internal/http`; it passed.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go test -mod=mod ./...`; it passed.
+- Re-ran `env GOCACHE=/tmp/go-build-ai-chat go build -mod=mod -buildvcs=false ./cmd/server`; it passed.
 - Service tests verified:
   - registration normalizes email.
   - duplicate registration is rejected.
@@ -644,11 +820,27 @@ Prepare v1.0 planning from the remaining P3 scope.
 - Real MySQL migration of existing `model_configs.name` and `roles.model_config_id` in the user's local database.
 - Real MySQL migration of existing `roles.avatar` in the user's local database.
 - Real MySQL migration of existing `chats` table with the new `topic` column in the user's local database.
+- Real MySQL migration of new `chat_files` table in the user's local database.
+- Real MySQL migration of new `tool_executions` table in the user's local database.
 - v0.3 theme mode UI in a real browser.
 - Real model API behavior with topic-injected prompts.
+- Real browser upload and AI analysis behavior for the v1.0 file upload slice.
+- Real local browser file picker and drag-and-drop behavior for `.docx` and `.pdf`.
+- Real-world complex PDF extraction quality beyond the basic text-based PDF fixtures.
+- Real model API behavior with file-context-injected prompts.
+- Real browser tool execution behavior for the v1.0 controlled tools slice.
 - Real `/models` connectivity for saved model API configs.
 - Real `/chat/completions` connectivity for saved role model configs.
+- User-side browser visual verification that toggling AI review no longer refreshes the page.
+- User-side browser verification that model settings and role cards show route metadata clearly.
+- User-side browser verification that real model replies still work after the route metadata UI changes.
 - User review of `docs/ai/developer-settings.md`.
+- User review of `docs/ai/deployment.md`.
+- User review of `docs/ai/observability.md`.
+- User review of `docs/ai/ci.md`.
+- Real production deployment using the deployment guide.
+- External metrics/alerting/error-reporting integration.
+- Remote GitHub Actions execution after pushing to a GitHub repository.
 
 ## Blockers
 
@@ -664,16 +856,20 @@ Prepare v1.0 planning from the remaining P3 scope.
 - Real Redis and model services are not verified from this environment.
 - Temporary build binary `server` remains in the workspace because deletion approval failed; it is ignored by `.gitignore`.
 - Chrome, Chromium, and Firefox executables are not available in this environment, so browser keyboard automation cannot be run here.
+- Chrome, Chromium, and Firefox executables are not available in this environment, so the AI review no-refresh behavior was verified by real HTTP JSON behavior rather than browser click automation.
+- Real model qualitative output for the AI review natural-reply prompt optimization cannot be judged from this environment because no provider call is made during automated tests.
+- Real model qualitative output for selective AI participation cannot be judged from this environment because no provider call is made during automated tests.
+- Real provider latency improvement from concurrent first-round AI calls cannot be measured from this environment because automated tests use fake AI clients.
 
 ## Deliverable Status
 
-v0.3 developer settings documentation deliverable; user-side review still required.
+v1.0 minimum closure is complete by current code/documentation evidence. The AI review natural-reply prompt optimization, faster first-round AI reply/status text optimization, static cache-busting fix, AI review trigger simplification, and AI review polling fix are implemented and code-verified. The previous "only two first-round speakers" strategy has been rolled back. It is ready for user acceptance checks.
 
-Reason: automated tests and build pass, and the slice is limited to documentation plus `.env.example`. It does not change runtime behavior. The remaining acceptance evidence is user review that the document is sufficient for local setup and troubleshooting.
+Reason: all v1.0 roadmap completion criteria have implementation or documentation evidence, and the latest `go test`/`go build` checks pass. Remaining items are environment-specific acceptance checks that require the user's browser, real model provider, production host, or remote GitHub Actions.
 
 ## Next Recommendation
 
-Review `docs/ai/developer-settings.md` and `.env.example` against the user's local setup: confirm the documented MySQL, Redis, port, upload, model API, theme, and troubleshooting instructions are accurate enough to use.
+User acceptance checks for v1.0 minimum closure, all-role first-round replies, status text behavior, and reliable AI review visibility.
 
 ## Ongoing Rule
 

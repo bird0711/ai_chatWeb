@@ -1,8 +1,10 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -22,6 +24,8 @@ type fakeStore struct {
 	chats    []domain.Chat
 	roles    []domain.Role
 	messages []domain.Message
+	files    []domain.ChatFile
+	tools    []domain.ToolExecution
 	usages   []domain.TokenUsage
 	users    []domain.User
 	sessions map[string]int64
@@ -173,10 +177,72 @@ func (f *fakeStore) DeleteChat(ctx context.Context, chatID int64) error {
 				}
 			}
 			f.messages = messages
+			var files []domain.ChatFile
+			for _, file := range f.files {
+				if file.ChatID != chatID {
+					files = append(files, file)
+				}
+			}
+			f.files = files
+			var tools []domain.ToolExecution
+			for _, tool := range f.tools {
+				if tool.ChatID != chatID {
+					tools = append(tools, tool)
+				}
+			}
+			f.tools = tools
 			return nil
 		}
 	}
 	return domain.ErrNotFound
+}
+
+func (f *fakeStore) CreateChatFile(ctx context.Context, file domain.ChatFile) (domain.ChatFile, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	userID, _ := domain.UserIDFromContext(ctx)
+	file.ID = f.next()
+	file.UserID = userID
+	file.CreatedAt = time.Now()
+	f.files = append(f.files, file)
+	return file, nil
+}
+
+func (f *fakeStore) ListChatFiles(ctx context.Context, chatID int64) ([]domain.ChatFile, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	userID, _ := domain.UserIDFromContext(ctx)
+	var files []domain.ChatFile
+	for _, file := range f.files {
+		if file.ChatID == chatID && file.UserID == userID {
+			files = append(files, file)
+		}
+	}
+	return files, nil
+}
+
+func (f *fakeStore) CreateToolExecution(ctx context.Context, execution domain.ToolExecution) (domain.ToolExecution, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	userID, _ := domain.UserIDFromContext(ctx)
+	execution.ID = f.next()
+	execution.UserID = userID
+	execution.CreatedAt = time.Now()
+	f.tools = append(f.tools, execution)
+	return execution, nil
+}
+
+func (f *fakeStore) ListToolExecutions(ctx context.Context, chatID int64) ([]domain.ToolExecution, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	userID, _ := domain.UserIDFromContext(ctx)
+	var tools []domain.ToolExecution
+	for _, tool := range f.tools {
+		if tool.ChatID == chatID && tool.UserID == userID {
+			tools = append(tools, tool)
+		}
+	}
+	return tools, nil
 }
 
 func (f *fakeStore) CreateRole(ctx context.Context, role domain.Role) (domain.Role, error) {
@@ -456,9 +522,14 @@ func TestMVPWebOperationPath(t *testing.T) {
 			t.Fatalf("expected chat-like message markup %q, body: %s", expected, body)
 		}
 	}
-	for _, expected := range []string{"chat-workspace", "chat-sidebar-left", "chat-main", "chat-sidebar-right", "settings-menu", "side-menu", "本地头像图片", `type="file" name="avatar_file"`, `enctype="multipart/form-data"`, `data-enter-submit="true"`, "按 Enter 发送，Shift + Enter 换行。", `data-theme-toggle`, `/static/theme.js`, ">发送</button>"} {
+	for _, expected := range []string{"chat-workspace", "chat-sidebar-left", "chat-main", "chat-sidebar-right", "settings-menu", "side-menu", "本地头像图片", `type="file" name="avatar_file"`, `enctype="multipart/form-data"`, `data-enter-submit="true"`, "按 Enter 发送，Shift + Enter 换行。", `data-theme-toggle`, `/static/theme.js?v=20260504a`, `/static/chat.js?v=20260504a`, ">发送</button>"} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("expected centered chat workspace markup %q, body: %s", expected, body)
+		}
+	}
+	for _, expected := range []string{"文件资料", "/chats/1/files", `name="chat_file"`, `data-chat-file-form`, `data-chat-file-input`, `data-chat-file-submit`, ".docx", ".pdf", "从本机上传文件", "点击选择本地文件，或把文件拖到这里", "支持 txt、md、json、csv、log、docx、pdf", "请直接选择你电脑本地的文件", "扫描版 PDF 暂不支持", "上传后 AI 回复和互评会参考文件文本内容"} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected chat file upload markup %q, body: %s", expected, body)
 		}
 	}
 	for _, expected := range []string{`name="reasoning_effort"`, "思考强度", "默认", "低", "中", "高", "仅在兼容的模型 API 中生效"} {
@@ -612,7 +683,7 @@ func TestV02RoleEditAndSpeakingPermissionRoutes(t *testing.T) {
 		"model_choice": {"2::backup-model"},
 	}, http.StatusFound)
 	body := assertStatus(t, router, client, http.MethodGet, "/chats/1", nil, http.StatusOK).Body.String()
-	for _, expected := range []string{"Strategist", "St", "Updated persona", "short · backup-model", "已禁言"} {
+	for _, expected := range []string{"Strategist", "St", "Updated persona", "short · 思考强度：默认", "路由 #2 · Test API · openai-compatible · backup-model", "已禁言"} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("expected role page to contain %q, body: %s", expected, body)
 		}
@@ -629,6 +700,28 @@ func TestV02RoleEditAndSpeakingPermissionRoutes(t *testing.T) {
 	}
 	assertStatus(t, router, client, http.MethodPost, "/chats/1/messages/async", url.Values{"content": {"allowed"}}, http.StatusAccepted)
 	waitForMessages(t, router, client, "/chats/1/messages/updates?after_id=0", []string{"reply from Architect", "reply from Strategist"})
+}
+
+func TestChatActionErrorsAreLogged(t *testing.T) {
+	t.Setenv("TEMPLATE_GLOB", "../../web/templates/*.html")
+	t.Setenv("STATIC_DIR", "../../web/static")
+	router := NewRouter(app.NewServices(newFakeStore(), fakeAI{}), fakeRedis{})
+	client := newTestClient()
+
+	assertStatus(t, router, client, http.MethodPost, "/register", url.Values{"email": {"logs@example.test"}, "password": {"secret1"}}, http.StatusFound)
+	assertStatus(t, router, client, http.MethodPost, "/chats", url.Values{"name": {"Log Chat"}}, http.StatusFound)
+
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previous)
+
+	assertStatus(t, router, client, http.MethodPost, "/chats/1/messages/async", url.Values{"content": {"blocked"}}, http.StatusBadRequest)
+	for _, expected := range []string{"chat_action_error", "send_message_async", "chat_id=1", "status=400"} {
+		if !strings.Contains(logs.String(), expected) {
+			t.Fatalf("expected log output to contain %q, got %s", expected, logs.String())
+		}
+	}
 }
 
 func TestV02AIReviewRoutes(t *testing.T) {
@@ -654,14 +747,34 @@ func TestV02AIReviewRoutes(t *testing.T) {
 	if !strings.Contains(body, "AI 互评") || !strings.Contains(body, "已关闭") {
 		t.Fatalf("expected AI review disabled state, body: %s", body)
 	}
+	if !strings.Contains(body, `data-ai-review-form`) || !strings.Contains(body, `data-ai-review-page-status`) {
+		t.Fatalf("expected async AI review toggle markup, body: %s", body)
+	}
 	assertStatus(t, router, client, http.MethodPost, "/chats/1/ai-review", url.Values{"enabled": {"1"}}, http.StatusFound)
 	body = assertStatus(t, router, client, http.MethodGet, "/chats/1", nil, http.StatusOK).Body.String()
 	if !strings.Contains(body, "已开启") {
 		t.Fatalf("expected AI review enabled state, body: %s", body)
 	}
+	rec := assertStatusWithHeaders(t, router, client, http.MethodPost, "/chats/1/ai-review", url.Values{"enabled": {"0"}}, map[string]string{"Accept": "application/json"}, http.StatusOK)
+	var toggleBody struct {
+		ChatID          int64  `json:"chat_id"`
+		AIReviewEnabled bool   `json:"ai_review_enabled"`
+		Status          string `json:"ai_review_status"`
+		Headline        string `json:"ai_review_headline"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &toggleBody); err != nil {
+		t.Fatalf("expected JSON AI review response, got %s: %v", rec.Body.String(), err)
+	}
+	if toggleBody.ChatID != 1 || toggleBody.AIReviewEnabled || toggleBody.Status != "已关闭" || toggleBody.Headline != "AI 互评已关闭" {
+		t.Fatalf("unexpected AI review JSON response: %#v", toggleBody)
+	}
+	assertStatusWithHeaders(t, router, client, http.MethodPost, "/chats/1/ai-review", url.Values{"enabled": {"1"}}, map[string]string{"Accept": "application/json"}, http.StatusOK)
 
 	assertStatus(t, router, client, http.MethodPost, "/chats/1/messages/async", url.Values{"content": {"with review"}}, http.StatusAccepted)
-	waitForMessages(t, router, client, "/chats/1/messages/updates?after_id=0", []string{"reply from Architect", "reply from Reviewer", "review from Architect", "review from Reviewer"})
+	waitForMessages(t, router, client, "/chats/1/messages/updates?after_id=0", []string{"reply from Architect", "reply from Reviewer", "review from"})
+
+	assertStatus(t, router, client, http.MethodPost, "/chats/1/messages/async", url.Values{"content": {"with review, please compare these options and identify the main risk"}}, http.StatusAccepted)
+	waitForMessages(t, router, client, "/chats/1/messages/updates?after_id=0", []string{"review from"})
 }
 
 func TestV03ChatTopicRoutes(t *testing.T) {
@@ -683,6 +796,30 @@ func TestV03ChatTopicRoutes(t *testing.T) {
 	rec := assertStatus(t, router, client, http.MethodPost, "/chats/1/topic", url.Values{"topic": {tooLong}}, http.StatusBadRequest)
 	if !strings.Contains(rec.Body.String(), "at most 500") {
 		t.Fatalf("expected topic validation error, body: %s", rec.Body.String())
+	}
+}
+
+func TestV10ToolRoutes(t *testing.T) {
+	t.Setenv("TEMPLATE_GLOB", "../../web/templates/*.html")
+	t.Setenv("STATIC_DIR", "../../web/static")
+	router := NewRouter(app.NewServices(newFakeStore(), fakeAI{}), fakeRedis{})
+	client := newTestClient()
+
+	assertStatus(t, router, client, http.MethodPost, "/register", url.Values{"email": {"tools@example.test"}, "password": {"secret1"}}, http.StatusFound)
+	assertStatus(t, router, client, http.MethodPost, "/chats", url.Values{"name": {"Tool Chat"}}, http.StatusFound)
+	body := assertStatus(t, router, client, http.MethodGet, "/chats/1", nil, http.StatusOK).Body.String()
+	for _, expected := range []string{"受控工具", "/chats/1/tools", "current_time", "text_stats", "calculator", "不执行系统命令"} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected tool UI to contain %q, body: %s", expected, body)
+		}
+	}
+
+	assertStatus(t, router, client, http.MethodPost, "/chats/1/tools", url.Values{"tool_name": {"calculator"}, "tool_input": {"12 * (3 + 4)"}}, http.StatusFound)
+	body = assertStatus(t, router, client, http.MethodGet, "/chats/1", nil, http.StatusOK).Body.String()
+	for _, expected := range []string{"工具 calculator 执行成功", "结果：84", "calculator · success"} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected tool result %q, body: %s", expected, body)
+		}
 	}
 }
 
@@ -712,13 +849,13 @@ func TestV02MultipleModelConfigsRoutes(t *testing.T) {
 	}, http.StatusOK)
 
 	body := assertStatus(t, router, client, http.MethodGet, "/settings/model", nil, http.StatusOK).Body.String()
-	for _, expected := range []string{"Primary API", "Backup API", "test-model", "backup-model"} {
+	for _, expected := range []string{"Primary API", "Backup API", "test-model", "backup-model", "路由 #2", "路由 #3", "openai-compatible", "https://primary.example.test/v1"} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("expected settings page to contain %q, body: %s", expected, body)
 		}
 	}
 	chatBody := assertStatus(t, router, client, http.MethodGet, "/chats/1", nil, http.StatusOK).Body.String()
-	for _, expected := range []string{"Primary API / test-model", "Backup API / backup-model"} {
+	for _, expected := range []string{"路由 #2 · Primary API / test-model", "路由 #3 · Backup API / backup-model"} {
 		if !strings.Contains(chatBody, expected) {
 			t.Fatalf("expected chat page to contain model choice %q, body: %s", expected, chatBody)
 		}
@@ -730,6 +867,12 @@ func TestV02MultipleModelConfigsRoutes(t *testing.T) {
 		"persona":      {"persona"},
 		"reply_style":  {"concise"},
 	}, http.StatusFound)
+	chatBody = assertStatus(t, router, client, http.MethodGet, "/chats/1", nil, http.StatusOK).Body.String()
+	for _, expected := range []string{"路由 #2 · Primary API · openai-compatible · test-model", "route-chip"} {
+		if !strings.Contains(chatBody, expected) {
+			t.Fatalf("expected role route metadata %q, body: %s", expected, chatBody)
+		}
+	}
 	assertStatus(t, router, client, http.MethodPost, "/settings/model/3/delete", nil, http.StatusFound)
 	body = assertStatus(t, router, client, http.MethodGet, "/settings/model", nil, http.StatusOK).Body.String()
 	if strings.Contains(body, "Backup API") {
@@ -810,6 +953,11 @@ func newTestClient() *testClient {
 
 func assertStatus(t *testing.T, handler http.Handler, client *testClient, method, path string, form url.Values, status int) *httptest.ResponseRecorder {
 	t.Helper()
+	return assertStatusWithHeaders(t, handler, client, method, path, form, nil, status)
+}
+
+func assertStatusWithHeaders(t *testing.T, handler http.Handler, client *testClient, method, path string, form url.Values, headers map[string]string, status int) *httptest.ResponseRecorder {
+	t.Helper()
 	var body *strings.Reader
 	if form != nil {
 		body = strings.NewReader(form.Encode())
@@ -819,6 +967,9 @@ func assertStatus(t *testing.T, handler http.Handler, client *testClient, method
 	req := httptest.NewRequest(method, path, body)
 	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
 	}
 	if client != nil {
 		for _, cookie := range client.cookies {

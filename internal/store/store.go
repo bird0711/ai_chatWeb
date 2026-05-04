@@ -23,6 +23,8 @@ type Store interface {
 	GetChat(ctx context.Context, chatID int64) (domain.Chat, error)
 	UpdateChatAIReview(ctx context.Context, chatID int64, enabled bool) (domain.Chat, error)
 	UpdateChatTopic(ctx context.Context, chatID int64, topic string) (domain.Chat, error)
+	CreateChatFile(ctx context.Context, file domain.ChatFile) (domain.ChatFile, error)
+	ListChatFiles(ctx context.Context, chatID int64) ([]domain.ChatFile, error)
 
 	CreateRole(ctx context.Context, role domain.Role) (domain.Role, error)
 	ListRoles(ctx context.Context, chatID int64) ([]domain.Role, error)
@@ -43,5 +45,7 @@ type Store interface {
 	ListMessagesAfter(ctx context.Context, chatID, afterID int64) ([]domain.Message, error)
 	CreateTokenUsage(ctx context.Context, usage domain.TokenUsage) (domain.TokenUsage, error)
 	TokenUsageStats(ctx context.Context, now time.Time) (domain.TokenUsageStats, error)
+	CreateToolExecution(ctx context.Context, execution domain.ToolExecution) (domain.ToolExecution, error)
+	ListToolExecutions(ctx context.Context, chatID int64) ([]domain.ToolExecution, error)
 	DeleteChat(ctx context.Context, chatID int64) error
 }

@@ -40,9 +40,9 @@
             <div class="row-main">
               <div>
                 <strong>{{ .Name }}</strong>
-                <span>{{ .Provider }} · {{ .DefaultModel }}</span>
+                <span>路由 #{{ .ID }} · {{ .Provider }} · 默认 {{ .DefaultModel }}</span>
               </div>
-              <span>{{ len .Models }} 个模型</span>
+              <span>{{ len .Models }} 个模型 · {{ .BaseURL }}</span>
             </div>
             <form method="post" action="/settings/model/{{ .ID }}/delete" data-confirm="确认删除这个 API 配置？仍被角色使用的配置无法删除。">
               <button type="submit" class="button-danger">删除</button>

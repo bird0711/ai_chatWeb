@@ -27,6 +27,7 @@ type ReplyInput struct {
 	Chat        domain.Chat
 	Role        domain.Role
 	Messages    []domain.Message
+	Files       []domain.ChatFile
 	ModelConfig domain.ModelConfig
 	UserMessage domain.Message
 }
@@ -35,6 +36,7 @@ type ReviewInput struct {
 	Chat              domain.Chat
 	Role              domain.Role
 	Messages          []domain.Message
+	Files             []domain.ChatFile
 	ModelConfig       domain.ModelConfig
 	UserMessage       domain.Message
 	FirstRoundReplies []domain.Message

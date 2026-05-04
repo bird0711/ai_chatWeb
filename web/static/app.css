@@ -496,6 +496,16 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.route-chip {
+  margin-top: 6px;
+  color: #28536b;
+  font-weight: 700;
+}
+
+:root[data-theme="dark"] .route-chip {
+  color: #8ec7e6;
+}
+
 .card-header {
   display: flex;
   align-items: flex-start;
@@ -571,6 +581,103 @@ button:disabled {
 
 .message-search-empty {
   justify-self: center;
+}
+
+.file-upload-zone {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed #9bb4c2;
+  border-radius: 10px;
+  background: #eef5f8;
+  cursor: pointer;
+}
+
+:root[data-theme="dark"] .file-upload-zone {
+  border-color: #456273;
+  color: #d8e7f0;
+  background: #101a22;
+}
+
+.file-upload-zone.drag-over {
+  border-color: #256c8f;
+  background: #e1f0f6;
+}
+
+:root[data-theme="dark"] .file-upload-zone.drag-over {
+  border-color: #6fb1d0;
+  background: #172f3d;
+}
+
+.file-upload-zone strong {
+  color: #263842;
+  font-size: 13px;
+}
+
+.file-upload-zone span,
+.file-upload-zone small {
+  color: #52616b;
+}
+
+:root[data-theme="dark"] .file-upload-zone strong {
+  color: #d8e7f0;
+}
+
+:root[data-theme="dark"] .file-upload-zone span,
+:root[data-theme="dark"] .file-upload-zone small,
+:root[data-theme="dark"] .file-upload-zone input[type="file"] {
+  color: #c7d7e2;
+}
+
+.file-upload-zone input[type="file"] {
+  background: #ffffff;
+}
+
+:root[data-theme="dark"] .file-upload-zone input[type="file"] {
+  border-color: #3b5263;
+  background: #0f1a22;
+}
+
+.file-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.file-card,
+.tool-card {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid #dce6ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+:root[data-theme="dark"] .file-card,
+:root[data-theme="dark"] .tool-card {
+  border-color: #2f4657;
+  background: #101a22;
+}
+
+.file-card small,
+.tool-card small {
+  color: #6f7d86;
+  font-weight: 600;
+}
+
+.tool-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.tool-card.success {
+  border-color: #bfe2cc;
+}
+
+.tool-card.failed {
+  border-color: #f0c2c2;
 }
 
 .message-row {

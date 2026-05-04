@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ .Title }}</title>
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v=20260504a">
 </head>
 <body>
   <header class="topbar">
@@ -73,7 +73,9 @@
                       </div>
                     </div>
                     <p>{{ .Persona }}</p>
-                    <small>{{ .ReplyStyle }} · {{ .Model }} · 思考强度：{{ if .ReasoningEffort }}{{ .ReasoningEffort }}{{ else }}默认{{ end }}</small>
+                    {{ $route := configByID $.Configs .ModelConfigID }}
+                    <small>{{ .ReplyStyle }} · 思考强度：{{ if .ReasoningEffort }}{{ .ReasoningEffort }}{{ else }}默认{{ end }}</small>
+                    <small class="route-chip">路由 #{{ .ModelConfigID }} · {{ if $route.Name }}{{ $route.Name }}{{ else }}未找到配置{{ end }} · {{ if $route.Provider }}{{ $route.Provider }}{{ else }}unknown-provider{{ end }} · {{ .Model }}</small>
                     {{ if $.Configs }}
                       <details class="role-edit">
                         <summary>编辑角色</summary>
@@ -96,15 +98,15 @@
                             <textarea name="reply_style" required rows="2">{{ .ReplyStyle }}</textarea>
                           </label>
                           <label>
-                            <span>API 配置 / 模型</span>
-                            <select name="model_choice" required>
-                              {{ $roleConfigID := .ModelConfigID }}
-                              {{ $roleModel := .Model }}
-                              {{ range $.Configs }}
-                                {{ $config := . }}
-                                <optgroup label="{{ .Name }}">
+                          <span>API 配置 / 模型</span>
+                          <select name="model_choice" required>
+                            {{ $roleConfigID := .ModelConfigID }}
+                            {{ $roleModel := .Model }}
+                            {{ range $.Configs }}
+                              {{ $config := . }}
+                                <optgroup label="路由 #{{ .ID }} · {{ .Name }} · {{ .Provider }}">
                                   {{ range .Models }}
-                                    <option value="{{ $config.ID }}::{{ . }}" {{ if and (eq $config.ID $roleConfigID) (modelEquals . $roleModel) }}selected{{ end }}>{{ $config.Name }} / {{ . }}</option>
+                                    <option value="{{ $config.ID }}::{{ . }}" {{ if and (eq $config.ID $roleConfigID) (modelEquals . $roleModel) }}selected{{ end }}>路由 #{{ $config.ID }} · {{ $config.Name }} / {{ . }}</option>
                                   {{ end }}
                                 </optgroup>
                               {{ end }}
@@ -141,7 +143,7 @@
       <section class="panel messages-panel chat-main">
         <div class="section-title">
           <h2>消息</h2>
-          <span>{{ if .Chat.AIReviewEnabled }}AI 互评已开启{{ else }}AI 互评已关闭{{ end }}</span>
+          <span data-ai-review-page-status>{{ if .Chat.AIReviewEnabled }}AI 互评已开启{{ else }}AI 互评已关闭{{ end }}</span>
         </div>
         <div class="message-search" role="search" aria-label="搜索群聊历史">
           <label for="message-search-input">搜索历史消息</label>
@@ -215,6 +217,37 @@
         </div>
 
         <div class="panel compact-panel">
+          <details class="settings-menu side-menu" open>
+            <summary>
+              <span>文件资料</span>
+              <small>{{ len .Files }} 个文件</small>
+            </summary>
+            <form method="post" action="/chats/{{ .Chat.ID }}/files" class="stack-form" enctype="multipart/form-data" data-chat-file-form>
+              <label class="file-upload-zone" data-file-drop-zone>
+                <span>从本机上传文件</span>
+                <input type="file" name="chat_file" accept=".txt,.md,.json,.csv,.log,.docx,.pdf,text/plain,text/markdown,application/json,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf" required data-chat-file-input>
+                <strong>点击选择本地文件，或把文件拖到这里</strong>
+                <small data-chat-file-name>尚未选择文件</small>
+              </label>
+              <small class="form-help">支持 txt、md、json、csv、log、docx、pdf，单个文件不超过 10MB。请直接选择你电脑本地的文件；扫描版 PDF 暂不支持。上传后 AI 回复和互评会参考文件文本内容。</small>
+              <button type="submit" data-chat-file-submit>上传文件</button>
+            </form>
+            {{ if .Files }}
+              <div class="file-list">
+                {{ range .Files }}
+                  <article class="file-card">
+                    <strong>{{ .OriginalName }}</strong>
+                    <small>{{ .ContentType }} · {{ .SizeBytes }} bytes</small>
+                  </article>
+                {{ end }}
+              </div>
+            {{ else }}
+              <p class="empty">还没有上传可供 AI 分析的文件。</p>
+            {{ end }}
+          </details>
+        </div>
+
+        <div class="panel compact-panel">
           <details class="settings-menu side-menu">
             <summary>
               <span>添加 AI 角色</span>
@@ -243,9 +276,9 @@
                   <select name="model_choice" required>
                     {{ range .Configs }}
                       {{ $config := . }}
-                      <optgroup label="{{ .Name }}">
+                      <optgroup label="路由 #{{ .ID }} · {{ .Name }} · {{ .Provider }}">
                         {{ range .Models }}
-                          <option value="{{ $config.ID }}::{{ . }}">{{ $config.Name }} / {{ . }}</option>
+                          <option value="{{ $config.ID }}::{{ . }}">路由 #{{ $config.ID }} · {{ $config.Name }} / {{ . }}</option>
                         {{ end }}
                       </optgroup>
                     {{ end }}
@@ -274,20 +307,59 @@
           <details class="settings-menu side-menu">
             <summary>
               <span>AI 互评</span>
-              <small>{{ if .Chat.AIReviewEnabled }}已开启{{ else }}已关闭{{ end }}</small>
+              <small data-ai-review-summary>{{ if .Chat.AIReviewEnabled }}已开启{{ else }}已关闭{{ end }}</small>
             </summary>
             <p class="empty">开启后，AI 完成第一轮回复后，会追加最多 2 条基于其他 AI 回答的补充或反驳。</p>
-            <form method="post" action="/chats/{{ .Chat.ID }}/ai-review" class="actions">
+            <form method="post" action="/chats/{{ .Chat.ID }}/ai-review" class="actions" data-ai-review-form>
               {{ if .Chat.AIReviewEnabled }}
                 <input type="hidden" name="enabled" value="0">
-                <span class="status ok">已开启</span>
-                <button type="submit" class="button-secondary">关闭互评</button>
+                <span class="status ok" data-ai-review-status>已开启</span>
+                <button type="submit" class="button-secondary" data-ai-review-submit>关闭互评</button>
               {{ else }}
                 <input type="hidden" name="enabled" value="1">
-                <span class="status muted">已关闭</span>
-                <button type="submit">开启互评</button>
+                <span class="status muted" data-ai-review-status>已关闭</span>
+                <button type="submit" data-ai-review-submit>开启互评</button>
               {{ end }}
             </form>
+          </details>
+        </div>
+
+        <div class="panel compact-panel">
+          <details class="settings-menu side-menu">
+            <summary>
+              <span>受控工具</span>
+              <small>{{ len .Tools }} 次执行</small>
+            </summary>
+            <form method="post" action="/chats/{{ .Chat.ID }}/tools" class="stack-form">
+              <label>
+                <span>选择工具</span>
+                <select name="tool_name" required>
+                  {{ range .ToolDefs }}
+                    <option value="{{ .Name }}">{{ .DisplayName }} - {{ .Description }}</option>
+                  {{ end }}
+                </select>
+              </label>
+              <label>
+                <span>工具输入</span>
+                <textarea name="tool_input" rows="3" placeholder="当前时间可留空；文本统计输入文本；计算器输入 12 * (3 + 4)。"></textarea>
+              </label>
+              <small class="form-help">工具调用只支持内置受控工具，不执行系统命令，不访问外网。执行结果会作为系统消息进入当前群聊。</small>
+              <button type="submit">运行工具</button>
+            </form>
+            {{ if .Tools }}
+              <div class="tool-list">
+                {{ range .Tools }}
+                  <article class="tool-card {{ .Status }}">
+                    <strong>{{ .ToolName }} · {{ .Status }}</strong>
+                    {{ if .Input }}<small>输入：{{ .Input }}</small>{{ end }}
+                    {{ if .Result }}<small>结果：{{ .Result }}</small>{{ end }}
+                    {{ if .Error }}<small>错误：{{ .Error }}</small>{{ end }}
+                  </article>
+                {{ end }}
+              </div>
+            {{ else }}
+              <p class="empty">还没有工具执行记录。</p>
+            {{ end }}
           </details>
         </div>
 
@@ -308,8 +380,8 @@
       </aside>
     </section>
   </main>
-  <script src="/static/theme.js"></script>
-  <script src="/static/chat.js"></script>
+  <script src="/static/theme.js?v=20260504a"></script>
+  <script src="/static/chat.js?v=20260504a"></script>
 </body>
 </html>
 {{ end }}

@@ -7,7 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,7 +18,9 @@ import (
 )
 
 type OpenAICompatibleClient struct {
-	httpClient *http.Client
+	httpClient    *http.Client
+	retryAttempts int
+	retryBackoff  time.Duration
 }
 
 type ChatMessage struct {
@@ -53,17 +58,27 @@ type modelsResponse struct {
 }
 
 func NewOpenAICompatibleClient() *OpenAICompatibleClient {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSHandshakeTimeout = envDurationSeconds("MODEL_API_TLS_HANDSHAKE_TIMEOUT_SECONDS", 30*time.Second)
+	timeout := envDurationSeconds("MODEL_API_TIMEOUT_SECONDS", 90*time.Second)
 	return &OpenAICompatibleClient{
-		httpClient: &http.Client{Timeout: 60 * time.Second},
+		httpClient: &http.Client{
+			Timeout:   timeout,
+			Transport: transport,
+		},
+		retryAttempts: envInt("MODEL_API_RETRY_ATTEMPTS", 2),
+		retryBackoff:  envDurationMillis("MODEL_API_RETRY_BACKOFF_MS", 800*time.Millisecond),
 	}
 }
 
 func (c *OpenAICompatibleClient) GenerateReply(ctx context.Context, input ReplyInput) (Reply, error) {
-	return c.generate(ctx, input.ModelConfig, input.Role, BuildSystemPrompt(input.Chat, input.Role), BuildConversation(input.Messages, input.UserMessage))
+	systemPrompt := AppendFileContext(BuildSystemPrompt(input.Chat, input.Role), input.Files)
+	return c.generate(ctx, input.ModelConfig, input.Role, systemPrompt, BuildConversation(input.Messages, input.UserMessage))
 }
 
 func (c *OpenAICompatibleClient) GenerateReview(ctx context.Context, input ReviewInput) (Reply, error) {
-	return c.generate(ctx, input.ModelConfig, input.Role, BuildReviewSystemPrompt(input.Chat, input.Role), BuildReviewConversation(input.Messages, input.UserMessage, input.FirstRoundReplies))
+	systemPrompt := AppendFileContext(BuildReviewSystemPrompt(input.Chat, input.Role), input.Files)
+	return c.generate(ctx, input.ModelConfig, input.Role, systemPrompt, BuildReviewConversation(input.Messages, input.UserMessage, input.FirstRoundReplies))
 }
 
 func (c *OpenAICompatibleClient) generate(ctx context.Context, config domain.ModelConfig, role domain.Role, systemPrompt string, conversation []ChatMessage) (Reply, error) {
@@ -94,14 +109,15 @@ func (c *OpenAICompatibleClient) generate(ctx context.Context, config domain.Mod
 		return Reply{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return Reply{}, err
-	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doWithRetry(func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
+	})
 	if err != nil {
 		return Reply{}, err
 	}
@@ -145,13 +161,14 @@ func (c *OpenAICompatibleClient) ListModels(ctx context.Context, config domain.M
 		return nil, errors.New("model API key is required")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doWithRetry(func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+		return req, nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -185,4 +202,135 @@ func (c *OpenAICompatibleClient) ListModels(ctx context.Context, config domain.M
 		return nil, errors.New("model API returned no models")
 	}
 	return models, nil
+}
+
+func (c *OpenAICompatibleClient) doWithRetry(newRequest func() (*http.Request, error)) (*http.Response, error) {
+	attempts := c.maxAttempts()
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		req, err := newRequest()
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.httpClient.Do(req)
+		if err == nil {
+			if attempt < attempts && shouldRetryStatus(resp.StatusCode) {
+				lastErr = fmt.Errorf("model API returned status %d", resp.StatusCode)
+				_ = resp.Body.Close()
+				c.sleepBeforeRetry(req.Context(), attempt)
+				continue
+			}
+			return resp, nil
+		}
+		lastErr = err
+		if attempt >= attempts || !isTransientModelAPIError(err) {
+			return nil, modelAPITransportError(err, attempt)
+		}
+		c.sleepBeforeRetry(req.Context(), attempt)
+	}
+	return nil, modelAPITransportError(lastErr, attempts)
+}
+
+func (c *OpenAICompatibleClient) maxAttempts() int {
+	if c.retryAttempts <= 0 {
+		return 1
+	}
+	return c.retryAttempts + 1
+}
+
+func (c *OpenAICompatibleClient) sleepBeforeRetry(ctx context.Context, attempt int) {
+	backoff := c.retryBackoff
+	if backoff == 0 {
+		backoff = 800 * time.Millisecond
+	}
+	if backoff < 0 {
+		backoff = 0
+	}
+	if backoff > 0 {
+		backoff *= time.Duration(attempt)
+	}
+	timer := time.NewTimer(backoff)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+	case <-timer.C:
+	}
+}
+
+func shouldRetryStatus(status int) bool {
+	return status == http.StatusRequestTimeout ||
+		status == http.StatusTooManyRequests ||
+		status == http.StatusBadGateway ||
+		status == http.StatusServiceUnavailable ||
+		status == http.StatusGatewayTimeout ||
+		status >= 500
+}
+
+func isTransientModelAPIError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "tls handshake timeout") ||
+		strings.Contains(text, "timeout") ||
+		strings.Contains(text, "connection reset") ||
+		strings.Contains(text, "temporary")
+}
+
+func modelAPITransportError(err error, attempts int) error {
+	if err == nil {
+		return errors.New("model API request failed")
+	}
+	text := strings.ToLower(err.Error())
+	if strings.Contains(text, "tls handshake timeout") {
+		return fmt.Errorf("模型 API TLS 握手超时，已尝试 %d 次；请稍后重试，或检查模型供应商网络和 base_url 配置", attempts)
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return fmt.Errorf("模型 API 连接超时，已尝试 %d 次；请稍后重试，或检查模型供应商网络和 base_url 配置", attempts)
+	}
+	if isTransientModelAPIError(err) {
+		return fmt.Errorf("模型 API 临时网络错误，已尝试 %d 次：%v", attempts, err)
+	}
+	return err
+}
+
+func envDurationSeconds(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return fallback
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func envDurationMillis(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	millis, err := strconv.Atoi(value)
+	if err != nil || millis < 0 {
+		return fallback
+	}
+	return time.Duration(millis) * time.Millisecond
+}
+
+func envInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return fallback
+	}
+	return parsed
 }

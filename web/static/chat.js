@@ -31,6 +31,7 @@
     var pollTimer = null;
     var pendingSinceID = 0;
     var pendingAI = 0;
+    var quietPolls = 0;
     var lastID = findLastMessageID(messages);
 
     form.addEventListener("submit", function (event) {
@@ -65,7 +66,8 @@
           textarea.value = "";
           pendingSinceID = body.message.id;
           pendingAI = 0;
-          setStatus(aiReviewEnabled ? "AI 正在回复，随后进行互评..." : "AI 正在回复...");
+          quietPolls = 0;
+          setStatus("AI 正在回复...");
           startPolling();
         })
         .catch(function (error) {
@@ -81,6 +83,8 @@
       textarea.addEventListener("keypress", handleSendShortcut, true);
     }
     setupMessageSearch();
+    setupFileUploadZones();
+    setupAIReviewToggle();
 
     function handleSendShortcut(event) {
       if (!isPlainEnter(event)) {
@@ -151,16 +155,23 @@
         })
         .then(function (body) {
           var gotSystem = false;
+          var gotAI = false;
           (body.messages || []).forEach(function (message) {
             appendMessage(message);
             if (message.id > pendingSinceID && message.sender_type === "ai") {
               pendingAI += 1;
+              gotAI = true;
             }
             if (message.id > pendingSinceID && message.sender_type === "system") {
               gotSystem = true;
             }
           });
-          if (pendingSinceID > 0 && expectedAIReplies() > 0 && pendingAI >= expectedAIReplies()) {
+          if (gotAI) {
+            quietPolls = 0;
+          } else if (pendingAI >= minimumAIReplies()) {
+            quietPolls += 1;
+          }
+          if (pendingSinceID > 0 && pendingAI >= minimumAIReplies() && quietPolls >= quietPollLimit()) {
             stopPolling("");
           } else if (gotSystem) {
             stopPolling("AI 回复出现异常，请查看系统消息。", true);
@@ -295,11 +306,15 @@
       return avatar;
     }
 
-    function expectedAIReplies() {
-      if (!aiReviewEnabled) {
-        return roleCount;
+    function minimumAIReplies() {
+      if (aiReviewEnabled) {
+        return roleCount + 1;
       }
-      return roleCount + Math.min(2, roleCount);
+      return roleCount;
+    }
+
+    function quietPollLimit() {
+      return 1;
     }
 
     function setBusy(busy) {
@@ -315,6 +330,143 @@
       status.textContent = message || "";
       status.classList.toggle("error", Boolean(isError));
     }
+
+    function setupAIReviewToggle() {
+      var reviewForm = document.querySelector("[data-ai-review-form]");
+      if (!reviewForm) {
+        return;
+      }
+      reviewForm.addEventListener("submit", function (event) {
+        if (!window.fetch) {
+          return;
+        }
+        event.preventDefault();
+        var button = reviewForm.querySelector("[data-ai-review-submit]");
+        var payload = new FormData(reviewForm);
+        if (button) {
+          button.disabled = true;
+        }
+        setStatus("正在更新 AI 互评设置...");
+        fetch(reviewForm.action, {
+          method: "POST",
+          body: payload,
+          headers: {"Accept": "application/json"}
+        })
+          .then(function (response) {
+            return response.json().then(function (body) {
+              if (!response.ok) {
+                throw new Error(body.error || "更新 AI 互评设置失败");
+              }
+              return body;
+            });
+          })
+          .then(function (body) {
+            updateAIReviewState(Boolean(body.ai_review_enabled));
+            setStatus("");
+          })
+          .catch(function (error) {
+            setStatus(error.message, true);
+          })
+          .finally(function () {
+            if (button) {
+              button.disabled = false;
+            }
+          });
+      });
+    }
+
+    function updateAIReviewState(enabled) {
+      aiReviewEnabled = enabled;
+      messages.setAttribute("data-ai-review-enabled", enabled ? "1" : "0");
+
+      var nextValue = enabled ? "0" : "1";
+      var hidden = document.querySelector("[data-ai-review-form] input[name='enabled']");
+      if (hidden) {
+        hidden.value = nextValue;
+      }
+
+      var statusNode = document.querySelector("[data-ai-review-status]");
+      if (statusNode) {
+        statusNode.textContent = enabled ? "已开启" : "已关闭";
+        statusNode.classList.toggle("ok", enabled);
+        statusNode.classList.toggle("muted", !enabled);
+      }
+
+      var summary = document.querySelector("[data-ai-review-summary]");
+      if (summary) {
+        summary.textContent = enabled ? "已开启" : "已关闭";
+      }
+
+      var pageStatus = document.querySelector("[data-ai-review-page-status]");
+      if (pageStatus) {
+        pageStatus.textContent = enabled ? "AI 互评已开启" : "AI 互评已关闭";
+      }
+
+      var button = document.querySelector("[data-ai-review-submit]");
+      if (button) {
+        button.textContent = enabled ? "关闭互评" : "开启互评";
+        button.classList.toggle("button-secondary", enabled);
+      }
+    }
+  }
+
+  function setupFileUploadZones() {
+    document.querySelectorAll("[data-file-drop-zone]").forEach(function (zone) {
+      var form = zone.closest("[data-chat-file-form]");
+      var input = zone.querySelector("[data-chat-file-input]");
+      var name = zone.querySelector("[data-chat-file-name]");
+      var submitButton = form && form.querySelector("[data-chat-file-submit]");
+      if (!form || !input || !name) {
+        return;
+      }
+      input.addEventListener("change", function () {
+        updateSelectedFileName(input, name);
+        submitChatFileForm(form, name, submitButton);
+      });
+      ["dragenter", "dragover"].forEach(function (eventName) {
+        zone.addEventListener(eventName, function (event) {
+          event.preventDefault();
+          zone.classList.add("drag-over");
+        });
+      });
+      ["dragleave", "drop"].forEach(function (eventName) {
+        zone.addEventListener(eventName, function (event) {
+          event.preventDefault();
+          zone.classList.remove("drag-over");
+        });
+      });
+      zone.addEventListener("drop", function (event) {
+        var files = event.dataTransfer && event.dataTransfer.files;
+        if (!files || files.length === 0) {
+          return;
+        }
+        input.files = files;
+        updateSelectedFileName(input, name);
+        submitChatFileForm(form, name, submitButton);
+      });
+    });
+  }
+
+  function updateSelectedFileName(input, name) {
+    var file = input.files && input.files[0];
+    name.textContent = file ? "已选择：" + file.name : "尚未选择文件";
+  }
+
+  function submitChatFileForm(form, name, submitButton) {
+    var input = form.querySelector("[data-chat-file-input]");
+    if (!input || !input.files || input.files.length === 0) {
+      return;
+    }
+    name.textContent = "正在上传：" + input.files[0].name;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "上传中...";
+    }
+    if (form.requestSubmit) {
+      form.requestSubmit();
+      return;
+    }
+    form.submit();
   }
 
   function findLastMessageID(container) {

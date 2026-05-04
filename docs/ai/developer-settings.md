@@ -25,8 +25,15 @@ This document describes the local development configuration for AI Chat Groups.
 | `TEMPLATE_GLOB` | `web/templates/*.html` | HTML template glob. Mostly for tests or custom packaging. |
 | `STATIC_DIR` | `web/static` | Static asset directory. |
 | `UPLOAD_DIR` | `uploads` | Local upload directory for AI role avatars. |
+| `CHAT_FILE_DIR` | `data/chat-files` | Non-public local storage directory for chat analysis files. |
+| `MODEL_API_TIMEOUT_SECONDS` | `90` | Total timeout for one model API HTTP request. |
+| `MODEL_API_TLS_HANDSHAKE_TIMEOUT_SECONDS` | `30` | TLS handshake timeout for model API connections. |
+| `MODEL_API_RETRY_ATTEMPTS` | `2` | Retry count for transient model API network errors. |
+| `MODEL_API_RETRY_BACKOFF_MS` | `800` | Base backoff between model API retries. |
 
 Use `.env.example` as the reference for local configuration. The current run script does not automatically load `.env`; export variables in your shell or prefix the run command.
+
+For self-hosted deployment guidance beyond local development, see `docs/ai/deployment.md`.
 
 ## Local Startup
 
@@ -60,6 +67,7 @@ Current migrations create or update:
 - model API configs.
 - roles, including model config binding, speaking permission, and avatar.
 - messages.
+- chat files for v1.0 file-assisted analysis.
 
 ## Redis Behavior
 
@@ -82,6 +90,12 @@ The app expects an OpenAI-compatible API:
 
 After a successful connection check, save the config and choose the saved API config/model when creating or editing AI roles.
 
+Model API network resilience defaults are intentionally conservative:
+
+- TLS handshakes can wait up to 30 seconds.
+- transient timeout errors are retried up to 2 times.
+- async background replies keep user context for up to 5 minutes.
+
 ## Uploads
 
 AI role avatars are stored under:
@@ -99,6 +113,26 @@ Allowed image extensions:
 - `.webp`
 
 The maximum avatar file size is 2 MB. The `uploads/` directory is ignored by Git.
+
+Chat analysis files are stored under:
+
+```text
+data/chat-files/
+```
+
+Allowed chat analysis extensions:
+
+- `.txt`
+- `.md`
+- `.json`
+- `.csv`
+- `.log`
+- `.docx`
+- `.pdf`
+
+The maximum chat analysis file size is 10 MB. The `data/` directory is ignored by Git. These files are not served through the public `/uploads` static route by default.
+
+`.docx` files are parsed from Office Open XML text. PDF support is limited to text-based PDFs where text is extractable; scanned image-only PDFs require OCR and are not supported in the current slice. The intended path is direct local upload from the browser, either by choosing a local file or dragging it into the upload area.
 
 ## Browser Settings
 
@@ -157,3 +191,9 @@ Check:
 - at least two AI roles are allowed to speak.
 - the selected model supports chat completions.
 - the chat page system message for the exact model API error.
+
+For `TLS handshake timeout` or similar timeout errors:
+
+- retry once from the chat page, because this is often a provider-side or network transient failure.
+- confirm the configured `base_url` is reachable from the machine running the app.
+- increase `MODEL_API_TLS_HANDSHAKE_TIMEOUT_SECONDS` or `MODEL_API_TIMEOUT_SECONDS` only if the provider is consistently slow but otherwise reliable.

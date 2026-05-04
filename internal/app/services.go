@@ -8,7 +8,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"ai_chat/internal/ai"
@@ -38,6 +41,8 @@ type Store interface {
 	GetChat(ctx context.Context, chatID int64) (domain.Chat, error)
 	UpdateChatAIReview(ctx context.Context, chatID int64, enabled bool) (domain.Chat, error)
 	UpdateChatTopic(ctx context.Context, chatID int64, topic string) (domain.Chat, error)
+	CreateChatFile(ctx context.Context, file domain.ChatFile) (domain.ChatFile, error)
+	ListChatFiles(ctx context.Context, chatID int64) ([]domain.ChatFile, error)
 	CreateRole(ctx context.Context, role domain.Role) (domain.Role, error)
 	ListRoles(ctx context.Context, chatID int64) ([]domain.Role, error)
 	GetRole(ctx context.Context, chatID, roleID int64) (domain.Role, error)
@@ -55,6 +60,8 @@ type Store interface {
 	ListMessagesAfter(ctx context.Context, chatID, afterID int64) ([]domain.Message, error)
 	CreateTokenUsage(ctx context.Context, usage domain.TokenUsage) (domain.TokenUsage, error)
 	TokenUsageStats(ctx context.Context, now time.Time) (domain.TokenUsageStats, error)
+	CreateToolExecution(ctx context.Context, execution domain.ToolExecution) (domain.ToolExecution, error)
+	ListToolExecutions(ctx context.Context, chatID int64) ([]domain.ToolExecution, error)
 	DeleteChat(ctx context.Context, chatID int64) error
 }
 
@@ -232,7 +239,45 @@ func (s *Services) GetChat(ctx context.Context, chatID int64) (domain.ChatDetail
 	if err != nil {
 		return domain.ChatDetail{}, err
 	}
-	return domain.ChatDetail{Chat: chat, Roles: roles, Messages: messages}, nil
+	files, err := s.store.ListChatFiles(ctx, chatID)
+	if err != nil {
+		return domain.ChatDetail{}, err
+	}
+	tools, err := s.store.ListToolExecutions(ctx, chatID)
+	if err != nil {
+		return domain.ChatDetail{}, err
+	}
+	return domain.ChatDetail{Chat: chat, Roles: roles, Messages: messages, Files: files, Tools: tools}, nil
+}
+
+func (s *Services) AddChatFile(ctx context.Context, chatID int64, originalName, storagePath, contentType string, sizeBytes int64, extractedText string) (domain.ChatFile, error) {
+	if _, err := s.store.GetChat(ctx, chatID); err != nil {
+		return domain.ChatFile{}, err
+	}
+	file := domain.ChatFile{
+		ChatID:        chatID,
+		OriginalName:  strings.TrimSpace(originalName),
+		StoragePath:   strings.TrimSpace(storagePath),
+		ContentType:   strings.TrimSpace(contentType),
+		SizeBytes:     sizeBytes,
+		ExtractedText: strings.TrimSpace(extractedText),
+	}
+	if file.OriginalName == "" {
+		return domain.ChatFile{}, fmt.Errorf("%w: file name is required", ErrValidation)
+	}
+	if len([]rune(file.OriginalName)) > 255 {
+		return domain.ChatFile{}, fmt.Errorf("%w: file name must be at most 255 characters", ErrValidation)
+	}
+	if file.StoragePath == "" {
+		return domain.ChatFile{}, fmt.Errorf("%w: file storage path is required", ErrValidation)
+	}
+	if file.SizeBytes <= 0 {
+		return domain.ChatFile{}, fmt.Errorf("%w: file is empty", ErrValidation)
+	}
+	if file.ExtractedText == "" {
+		return domain.ChatFile{}, fmt.Errorf("%w: uploaded file has no readable text content", ErrValidation)
+	}
+	return s.store.CreateChatFile(ctx, file)
 }
 
 func (s *Services) AddRole(ctx context.Context, chatID int64, modelConfigID int64, name, avatar, persona, style, model, reasoningEffort string) (domain.Role, error) {
@@ -393,12 +438,12 @@ func (s *Services) Health(ctx context.Context) error {
 }
 
 func (s *Services) SendUserMessage(ctx context.Context, chatID int64, content string) (domain.MessageResult, error) {
-	chat, roles, config, userMessage, history, err := s.prepareUserMessage(ctx, chatID, content)
+	chat, roles, config, userMessage, history, files, err := s.prepareUserMessage(ctx, chatID, content)
 	if err != nil {
 		return domain.MessageResult{}, err
 	}
-	result := s.generateAIReplies(ctx, chat, roles, config, userMessage, history)
-	s.appendAIReviews(ctx, chat, roles, config, userMessage, history, &result)
+	result := s.generateAIReplies(ctx, chat, roles, config, userMessage, history, files)
+	s.appendAIReviews(ctx, chat, roles, config, userMessage, history, files, &result)
 	if len(result.AIMessages) < 2 {
 		if len(result.Errors) > 0 {
 			return result, fmt.Errorf("%w: fewer than two AI replies succeeded: %s", ErrMVPBlocked, strings.Join(result.Errors, "; "))
@@ -409,15 +454,15 @@ func (s *Services) SendUserMessage(ctx context.Context, chatID int64, content st
 }
 
 func (s *Services) SendUserMessageAsync(ctx context.Context, chatID int64, content string) (domain.Message, error) {
-	chat, roles, config, userMessage, history, err := s.prepareUserMessage(ctx, chatID, content)
+	chat, roles, config, userMessage, history, files, err := s.prepareUserMessage(ctx, chatID, content)
 	if err != nil {
 		return domain.Message{}, err
 	}
 	go func() {
-		replyCtx, cancel := backgroundUserContext(ctx, 2*time.Minute)
+		replyCtx, cancel := backgroundUserContext(ctx, 5*time.Minute)
 		defer cancel()
-		result := s.generateAIReplies(replyCtx, chat, roles, config, userMessage, history)
-		s.appendAIReviews(replyCtx, chat, roles, config, userMessage, history, &result)
+		result := s.generateAIReplies(replyCtx, chat, roles, config, userMessage, history, files)
+		s.appendAIReviews(replyCtx, chat, roles, config, userMessage, history, files, &result)
 		if len(result.Errors) > 0 || len(result.AIMessages) < 2 {
 			message := "AI 回复未完成"
 			if len(result.Errors) > 0 {
@@ -426,6 +471,7 @@ func (s *Services) SendUserMessageAsync(ctx context.Context, chatID int64, conte
 			if len(result.AIMessages) < 2 {
 				message += "。本轮少于两个 AI 回复成功。"
 			}
+			log.Printf("async_ai_reply_error chat_id=%d ai_messages=%d errors=%q", chatID, len(result.AIMessages), strings.Join(result.Errors, "; "))
 			_, _ = s.store.CreateMessage(replyCtx, domain.Message{
 				ChatID:     chatID,
 				SenderType: domain.SenderSystem,
@@ -455,26 +501,30 @@ func (s *Services) ListMessagesAfter(ctx context.Context, chatID, afterID int64)
 	return s.store.ListMessagesAfter(ctx, chatID, afterID)
 }
 
-func (s *Services) prepareUserMessage(ctx context.Context, chatID int64, content string) (domain.Chat, []domain.Role, map[int64]domain.ModelConfig, domain.Message, []domain.Message, error) {
+func (s *Services) prepareUserMessage(ctx context.Context, chatID int64, content string) (domain.Chat, []domain.Role, map[int64]domain.ModelConfig, domain.Message, []domain.Message, []domain.ChatFile, error) {
 	content = strings.TrimSpace(content)
 	if content == "" {
-		return domain.Chat{}, nil, nil, domain.Message{}, nil, fmt.Errorf("%w: message content is required", ErrValidation)
+		return domain.Chat{}, nil, nil, domain.Message{}, nil, nil, fmt.Errorf("%w: message content is required", ErrValidation)
 	}
 	chat, err := s.store.GetChat(ctx, chatID)
 	if err != nil {
-		return domain.Chat{}, nil, nil, domain.Message{}, nil, err
+		return domain.Chat{}, nil, nil, domain.Message{}, nil, nil, err
 	}
 	roles, err := s.store.ListRoles(ctx, chatID)
 	if err != nil {
-		return domain.Chat{}, nil, nil, domain.Message{}, nil, err
+		return domain.Chat{}, nil, nil, domain.Message{}, nil, nil, err
 	}
 	roles = speakingRoles(roles)
 	if len(roles) < 2 {
-		return domain.Chat{}, nil, nil, domain.Message{}, nil, fmt.Errorf("%w: at least two AI roles with speaking permission are required before sending", ErrMVPBlocked)
+		return domain.Chat{}, nil, nil, domain.Message{}, nil, nil, fmt.Errorf("%w: at least two AI roles with speaking permission are required before sending", ErrMVPBlocked)
 	}
 	configs, err := s.roleModelConfigs(ctx, roles)
 	if err != nil {
-		return domain.Chat{}, nil, nil, domain.Message{}, nil, err
+		return domain.Chat{}, nil, nil, domain.Message{}, nil, nil, err
+	}
+	files, err := s.store.ListChatFiles(ctx, chatID)
+	if err != nil {
+		return domain.Chat{}, nil, nil, domain.Message{}, nil, nil, err
 	}
 
 	userMessage, err := s.store.CreateMessage(ctx, domain.Message{
@@ -484,13 +534,13 @@ func (s *Services) prepareUserMessage(ctx context.Context, chatID int64, content
 		Content:    content,
 	})
 	if err != nil {
-		return domain.Chat{}, nil, nil, domain.Message{}, nil, err
+		return domain.Chat{}, nil, nil, domain.Message{}, nil, nil, err
 	}
 	history, err := s.store.ListMessages(ctx, chatID)
 	if err != nil {
-		return domain.Chat{}, nil, nil, domain.Message{}, nil, err
+		return domain.Chat{}, nil, nil, domain.Message{}, nil, nil, err
 	}
-	return chat, roles, configs, userMessage, history, nil
+	return chat, roles, configs, userMessage, history, files, nil
 }
 
 func (s *Services) validateRole(ctx context.Context, role domain.Role, action string) error {
@@ -569,54 +619,70 @@ func (s *Services) roleModelConfigs(ctx context.Context, roles []domain.Role) (m
 	return configs, nil
 }
 
-func (s *Services) generateAIReplies(ctx context.Context, chat domain.Chat, roles []domain.Role, configs map[int64]domain.ModelConfig, userMessage domain.Message, history []domain.Message) domain.MessageResult {
+func (s *Services) generateAIReplies(ctx context.Context, chat domain.Chat, roles []domain.Role, configs map[int64]domain.ModelConfig, userMessage domain.Message, history []domain.Message, files []domain.ChatFile) domain.MessageResult {
 	result := domain.MessageResult{UserMessage: userMessage}
-	for _, role := range roles {
-		config := configs[role.ModelConfigID]
-		reply, err := s.ai.GenerateReply(ctx, ai.ReplyInput{
-			Chat:        chat,
-			Role:        role,
-			Messages:    history,
-			ModelConfig: config,
-			UserMessage: userMessage,
-		})
-		if err != nil {
-			result.Errors = append(result.Errors, role.Name+": "+err.Error())
+	selectedRoles := selectFirstRoundRoles(roles, userMessage)
+	replies := make([]roleReplyResult, len(selectedRoles))
+	var wg sync.WaitGroup
+	for i, role := range selectedRoles {
+		wg.Add(1)
+		go func(index int, role domain.Role) {
+			defer wg.Done()
+			config := configs[role.ModelConfigID]
+			reply, err := s.ai.GenerateReply(ctx, ai.ReplyInput{
+				Chat:        chat,
+				Role:        role,
+				Messages:    history,
+				Files:       files,
+				ModelConfig: config,
+				UserMessage: userMessage,
+			})
+			replies[index] = roleReplyResult{role: role, config: config, reply: reply, err: err}
+		}(i, role)
+	}
+	wg.Wait()
+	for _, item := range replies {
+		if item.err != nil {
+			result.Errors = append(result.Errors, item.role.Name+": "+item.err.Error())
 			continue
 		}
-		roleID := role.ID
+		roleID := item.role.ID
 		msg, err := s.store.CreateMessage(ctx, domain.Message{
 			ChatID:       chat.ID,
 			SenderType:   domain.SenderAI,
-			SenderName:   role.Name,
-			SenderAvatar: role.Avatar,
+			SenderName:   item.role.Name,
+			SenderAvatar: item.role.Avatar,
 			RoleID:       &roleID,
-			Content:      reply.Content,
+			Content:      item.reply.Content,
 		})
 		if err != nil {
-			result.Errors = append(result.Errors, role.Name+": save reply: "+err.Error())
+			result.Errors = append(result.Errors, item.role.Name+": save reply: "+err.Error())
 			continue
 		}
-		s.recordTokenUsage(ctx, chat.ID, msg.ID, role, config, reply, &result)
+		s.recordTokenUsage(ctx, chat.ID, msg.ID, item.role, item.config, item.reply, &result)
 		result.AIMessages = append(result.AIMessages, msg)
 	}
 	return result
 }
 
-func (s *Services) appendAIReviews(ctx context.Context, chat domain.Chat, roles []domain.Role, configs map[int64]domain.ModelConfig, userMessage domain.Message, history []domain.Message, result *domain.MessageResult) {
-	if !chat.AIReviewEnabled || len(result.AIMessages) < 2 {
+type roleReplyResult struct {
+	role   domain.Role
+	config domain.ModelConfig
+	reply  ai.Reply
+	err    error
+}
+
+func (s *Services) appendAIReviews(ctx context.Context, chat domain.Chat, roles []domain.Role, configs map[int64]domain.ModelConfig, userMessage domain.Message, history []domain.Message, files []domain.ChatFile, result *domain.MessageResult) {
+	if !shouldAppendAIReview(chat, userMessage, result) {
 		return
 	}
-	limit := 2
-	if len(roles) < limit {
-		limit = len(roles)
-	}
-	for _, role := range roles[:limit] {
+	for _, role := range selectReviewRoles(roles, result.AIMessages, userMessage) {
 		config := configs[role.ModelConfigID]
 		reply, err := s.ai.GenerateReview(ctx, ai.ReviewInput{
 			Chat:              chat,
 			Role:              role,
 			Messages:          history,
+			Files:             files,
 			ModelConfig:       config,
 			UserMessage:       userMessage,
 			FirstRoundReplies: result.AIMessages,
@@ -641,6 +707,45 @@ func (s *Services) appendAIReviews(ctx context.Context, chat domain.Chat, roles 
 		s.recordTokenUsage(ctx, chat.ID, msg.ID, role, config, reply, result)
 		result.AIMessages = append(result.AIMessages, msg)
 	}
+}
+
+func selectFirstRoundRoles(roles []domain.Role, userMessage domain.Message) []domain.Role {
+	return roles
+}
+
+func shouldAppendAIReview(chat domain.Chat, userMessage domain.Message, result *domain.MessageResult) bool {
+	return chat.AIReviewEnabled && len(result.AIMessages) >= 2
+}
+
+func selectReviewRoles(roles []domain.Role, firstRoundReplies []domain.Message, userMessage domain.Message) []domain.Role {
+	if len(roles) == 0 || len(firstRoundReplies) < 2 {
+		return nil
+	}
+	firstRoundRoleIDs := map[int64]bool{}
+	for _, reply := range firstRoundReplies {
+		if reply.RoleID != nil {
+			firstRoundRoleIDs[*reply.RoleID] = true
+		}
+	}
+	candidates := make([]domain.Role, 0, len(roles))
+	for _, role := range roles {
+		if !firstRoundRoleIDs[role.ID] {
+			candidates = append(candidates, role)
+		}
+	}
+	if len(candidates) == 0 {
+		candidates = roles
+	}
+	return []domain.Role{candidates[stableMessageIndex(userMessage, len(candidates))]}
+}
+
+func stableMessageIndex(message domain.Message, size int) int {
+	if size <= 0 {
+		return 0
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(fmt.Sprintf("%d:%s", message.ID, message.Content)))
+	return int(h.Sum32() % uint32(size))
 }
 
 func (s *Services) recordTokenUsage(ctx context.Context, chatID, messageID int64, role domain.Role, config domain.ModelConfig, reply ai.Reply, result *domain.MessageResult) {

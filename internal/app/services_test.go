@@ -16,6 +16,8 @@ type fakeStore struct {
 	chats    []domain.Chat
 	roles    []domain.Role
 	messages []domain.Message
+	files    []domain.ChatFile
+	tools    []domain.ToolExecution
 	usages   []domain.TokenUsage
 	users    []domain.User
 	sessions map[string]int64
@@ -171,10 +173,72 @@ func (f *fakeStore) DeleteChat(ctx context.Context, chatID int64) error {
 				}
 			}
 			f.messages = messages
+			var files []domain.ChatFile
+			for _, file := range f.files {
+				if file.ChatID != chatID {
+					files = append(files, file)
+				}
+			}
+			f.files = files
+			var tools []domain.ToolExecution
+			for _, tool := range f.tools {
+				if tool.ChatID != chatID {
+					tools = append(tools, tool)
+				}
+			}
+			f.tools = tools
 			return nil
 		}
 	}
 	return domain.ErrNotFound
+}
+
+func (f *fakeStore) CreateChatFile(ctx context.Context, file domain.ChatFile) (domain.ChatFile, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	userID, _ := domain.UserIDFromContext(ctx)
+	file.ID = f.next()
+	file.UserID = userID
+	file.CreatedAt = time.Now()
+	f.files = append(f.files, file)
+	return file, nil
+}
+
+func (f *fakeStore) ListChatFiles(ctx context.Context, chatID int64) ([]domain.ChatFile, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	userID, _ := domain.UserIDFromContext(ctx)
+	var files []domain.ChatFile
+	for _, file := range f.files {
+		if file.ChatID == chatID && file.UserID == userID {
+			files = append(files, file)
+		}
+	}
+	return files, nil
+}
+
+func (f *fakeStore) CreateToolExecution(ctx context.Context, execution domain.ToolExecution) (domain.ToolExecution, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	userID, _ := domain.UserIDFromContext(ctx)
+	execution.ID = f.next()
+	execution.UserID = userID
+	execution.CreatedAt = time.Now()
+	f.tools = append(f.tools, execution)
+	return execution, nil
+}
+
+func (f *fakeStore) ListToolExecutions(ctx context.Context, chatID int64) ([]domain.ToolExecution, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	userID, _ := domain.UserIDFromContext(ctx)
+	var tools []domain.ToolExecution
+	for _, tool := range f.tools {
+		if tool.ChatID == chatID && tool.UserID == userID {
+			tools = append(tools, tool)
+		}
+	}
+	return tools, nil
 }
 
 func (f *fakeStore) CreateRole(ctx context.Context, role domain.Role) (domain.Role, error) {
@@ -405,6 +469,57 @@ func (fakeAI) ListModels(ctx context.Context, config domain.ModelConfig) ([]stri
 	return []string{"model", "backup-model"}, nil
 }
 
+type capturingAI struct {
+	mu           sync.Mutex
+	replyInputs  []ai.ReplyInput
+	reviewInputs []ai.ReviewInput
+}
+
+func (c *capturingAI) GenerateReply(ctx context.Context, input ai.ReplyInput) (ai.Reply, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.replyInputs = append(c.replyInputs, input)
+	return ai.Reply{Content: "reply from " + input.Role.Name}, nil
+}
+
+func (c *capturingAI) GenerateReview(ctx context.Context, input ai.ReviewInput) (ai.Reply, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.reviewInputs = append(c.reviewInputs, input)
+	return ai.Reply{Content: "review from " + input.Role.Name}, nil
+}
+
+func (c *capturingAI) ListModels(ctx context.Context, config domain.ModelConfig) ([]string, error) {
+	return []string{"model"}, nil
+}
+
+type slowAI struct {
+	started chan string
+	release chan struct{}
+}
+
+func newSlowAI() *slowAI {
+	return &slowAI{started: make(chan string, 2), release: make(chan struct{})}
+}
+
+func (s *slowAI) GenerateReply(ctx context.Context, input ai.ReplyInput) (ai.Reply, error) {
+	s.started <- input.Role.Name
+	select {
+	case <-s.release:
+		return ai.Reply{Content: "reply from " + input.Role.Name}, nil
+	case <-ctx.Done():
+		return ai.Reply{}, ctx.Err()
+	}
+}
+
+func (s *slowAI) GenerateReview(ctx context.Context, input ai.ReviewInput) (ai.Reply, error) {
+	return ai.Reply{Content: "review from " + input.Role.Name}, nil
+}
+
+func (s *slowAI) ListModels(ctx context.Context, config domain.ModelConfig) ([]string, error) {
+	return []string{"model"}, nil
+}
+
 func saveTestConfig(t *testing.T, ctx context.Context, svc *Services, models string) domain.ModelConfig {
 	t.Helper()
 	config, err := svc.SaveModelConfig(ctx, "Test API", "openai-compatible", "https://example.test/v1", "key", "model", models)
@@ -498,6 +613,39 @@ func TestSendUserMessageSavesUserAndTwoAIReplies(t *testing.T) {
 	}
 }
 
+func TestSendUserMessageGeneratesFirstRoundRepliesConcurrently(t *testing.T) {
+	ctx := testUserContext()
+	st := newFakeStore()
+	aiClient := newSlowAI()
+	svc := NewServices(st, aiClient)
+	chat, err := svc.CreateChat(ctx, "Fast Chat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := saveTestConfig(t, ctx, svc, "model")
+	for _, name := range []string{"Architect", "Reviewer"} {
+		if _, err := svc.AddRole(ctx, chat.ID, config.ID, name, "", "persona", "style", "model", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := svc.SendUserMessage(ctx, chat.ID, "hello")
+		done <- err
+	}()
+	for i := 0; i < 2; i++ {
+		select {
+		case <-aiClient.started:
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("expected both first-round AI calls to start before either one is released")
+		}
+	}
+	close(aiClient.release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSetChatTopic(t *testing.T) {
 	ctx := testUserContext()
 	st := newFakeStore()
@@ -526,10 +674,101 @@ func TestSetChatTopic(t *testing.T) {
 	}
 }
 
-func TestRolesUseTheirSelectedModelConfigs(t *testing.T) {
+func TestAddChatFileAndPassesFilesToAI(t *testing.T) {
+	ctx := testUserContext()
+	st := newFakeStore()
+	aiClient := &capturingAI{}
+	svc := NewServices(st, aiClient)
+	chat, err := svc.CreateChat(ctx, "File Chat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := saveTestConfig(t, ctx, svc, "model")
+	if _, err := svc.AddRole(ctx, chat.ID, config.ID, "Architect", "", "persona", "style", "model", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddRole(ctx, chat.ID, config.ID, "Reviewer", "", "persona", "style", "model", ""); err != nil {
+		t.Fatal(err)
+	}
+	file, err := svc.AddChatFile(ctx, chat.ID, "brief.md", "/tmp/brief.md", "text/markdown", 24, "项目目标：降低延迟")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.UserID != 1 || file.OriginalName != "brief.md" {
+		t.Fatalf("unexpected file: %#v", file)
+	}
+	detail, err := svc.GetChat(ctx, chat.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Files) != 1 || detail.Files[0].ExtractedText != "项目目标：降低延迟" {
+		t.Fatalf("expected file on chat detail, got %#v", detail.Files)
+	}
+	if _, err := svc.SendUserMessage(ctx, chat.ID, "请分析文件"); err != nil {
+		t.Fatal(err)
+	}
+	if len(aiClient.replyInputs) != 2 {
+		t.Fatalf("expected two reply inputs, got %d", len(aiClient.replyInputs))
+	}
+	for _, input := range aiClient.replyInputs {
+		if len(input.Files) != 1 || input.Files[0].OriginalName != "brief.md" {
+			t.Fatalf("expected uploaded file to be passed to AI, got %#v", input.Files)
+		}
+	}
+}
+
+func TestRunToolCreatesSystemMessageAndExecution(t *testing.T) {
 	ctx := testUserContext()
 	st := newFakeStore()
 	svc := NewServices(st, fakeAI{})
+	chat, err := svc.CreateChat(ctx, "Tool Chat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution, err := svc.RunTool(ctx, chat.ID, "calculator", "12 * (3 + 4)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execution.Status != domain.ToolExecutionSuccess || execution.Result != "84" {
+		t.Fatalf("unexpected execution: %#v", execution)
+	}
+	if len(st.messages) != 1 || st.messages[0].SenderType != domain.SenderSystem || !strings.Contains(st.messages[0].Content, "84") {
+		t.Fatalf("expected system tool message, got %#v", st.messages)
+	}
+	detail, err := svc.GetChat(ctx, chat.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Tools) != 1 || detail.Tools[0].ToolName != "calculator" {
+		t.Fatalf("expected tool execution on detail, got %#v", detail.Tools)
+	}
+}
+
+func TestRunToolRecordsFailures(t *testing.T) {
+	ctx := testUserContext()
+	st := newFakeStore()
+	svc := NewServices(st, fakeAI{})
+	chat, err := svc.CreateChat(ctx, "Tool Chat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution, err := svc.RunTool(ctx, chat.ID, "calculator", "1 / 0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execution.Status != domain.ToolExecutionFailed || !strings.Contains(execution.Error, "division by zero") {
+		t.Fatalf("expected failed execution, got %#v", execution)
+	}
+	if len(st.messages) != 1 || !strings.Contains(st.messages[0].Content, "执行失败") {
+		t.Fatalf("expected failed system message, got %#v", st.messages)
+	}
+}
+
+func TestRolesUseTheirSelectedModelConfigs(t *testing.T) {
+	ctx := testUserContext()
+	st := newFakeStore()
+	capture := &capturingAI{}
+	svc := NewServices(st, capture)
 	chat, err := svc.CreateChat(ctx, "Multi API")
 	if err != nil {
 		t.Fatal(err)
@@ -557,6 +796,77 @@ func TestRolesUseTheirSelectedModelConfigs(t *testing.T) {
 	}
 	if _, err := svc.SendUserMessage(ctx, chat.ID, "hello"); err != nil {
 		t.Fatal(err)
+	}
+	if len(capture.replyInputs) != 2 {
+		t.Fatalf("expected two routed reply calls, got %d", len(capture.replyInputs))
+	}
+	routes := map[string]string{}
+	for _, input := range capture.replyInputs {
+		routes[input.Role.Name] = input.ModelConfig.Name + "|" + input.ModelConfig.Provider + "|" + input.ModelConfig.BaseURL + "|" + input.Role.Model
+	}
+	if routes["Fast"] != "Fast API|openai-compatible|https://fast.test/v1|fast-model" {
+		t.Fatalf("unexpected fast route: %q", routes["Fast"])
+	}
+	if routes["Deep"] != "Deep API|openai-compatible|https://deep.test/v1|deep-model" {
+		t.Fatalf("unexpected deep route: %q", routes["Deep"])
+	}
+}
+
+func TestAIReviewUsesSelectedModelRoutes(t *testing.T) {
+	ctx := testUserContext()
+	st := newFakeStore()
+	capture := &capturingAI{}
+	svc := NewServices(st, capture)
+	chat, err := svc.CreateChat(ctx, "Review Routes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fast, err := svc.SaveModelConfig(ctx, "Fast API", "openai-compatible", "https://fast.test/v1", "key", "fast-model", "fast-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deep, err := svc.SaveModelConfig(ctx, "Deep API", "openai-compatible", "https://deep.test/v1", "key", "deep-model", "deep-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddRole(ctx, chat.ID, fast.ID, "Fast", "", "persona", "style", "fast-model", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddRole(ctx, chat.ID, deep.ID, "Deep", "", "persona", "style", "deep-model", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetChatAIReview(ctx, chat.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SendUserMessage(ctx, chat.ID, "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if len(capture.reviewInputs) != 1 {
+		t.Fatalf("expected enabled AI review to run for short message, got %d review calls", len(capture.reviewInputs))
+	}
+	if _, err := svc.SendUserMessage(ctx, chat.ID, "please compare the tradeoffs in this plan and call out the main risk"); err != nil {
+		t.Fatal(err)
+	}
+	if len(capture.reviewInputs) != 2 {
+		t.Fatalf("expected one routed review call per message, got %d", len(capture.reviewInputs))
+	}
+	routes := map[string]string{}
+	for _, input := range capture.reviewInputs {
+		routes[input.Role.Name] = input.ModelConfig.Name + "|" + input.ModelConfig.BaseURL + "|" + input.Role.Model
+	}
+	for name, route := range routes {
+		switch name {
+		case "Fast":
+			if route != "Fast API|https://fast.test/v1|fast-model" {
+				t.Fatalf("unexpected fast review route: %q", route)
+			}
+		case "Deep":
+			if route != "Deep API|https://deep.test/v1|deep-model" {
+				t.Fatalf("unexpected deep review route: %q", route)
+			}
+		default:
+			t.Fatalf("unexpected review role %q with route %q", name, route)
+		}
 	}
 }
 
@@ -783,7 +1093,7 @@ func TestSendUserMessageAsyncRecordsTokenUsageWithUserContext(t *testing.T) {
 	}
 }
 
-func TestAIReviewAddsAtMostTwoReviewRepliesWhenEnabled(t *testing.T) {
+func TestAIReviewAddsSelectiveReviewReplyWhenEnabled(t *testing.T) {
 	ctx := testUserContext()
 	st := newFakeStore()
 	svc := NewServices(st, fakeAI{})
@@ -802,19 +1112,29 @@ func TestAIReviewAddsAtMostTwoReviewRepliesWhenEnabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(result.AIMessages) != 3 {
-		t.Fatalf("expected only first-round replies while review disabled, got %d", len(result.AIMessages))
+		t.Fatalf("expected all speaking roles to reply while review disabled, got %d", len(result.AIMessages))
 	}
 	if _, err := svc.SetChatAIReview(ctx, chat.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	result, err = svc.SendUserMessage(ctx, chat.ID, "with review")
+	result, err = svc.SendUserMessage(ctx, chat.ID, "short")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.AIMessages) != 5 {
-		t.Fatalf("expected three first-round replies plus two review replies, got %d", len(result.AIMessages))
+	if len(result.AIMessages) != 4 {
+		t.Fatalf("expected short message to include review when enabled, got %d AI messages", len(result.AIMessages))
 	}
-	if !strings.Contains(result.AIMessages[3].Content, "review from") || !strings.Contains(result.AIMessages[4].Content, "review from") {
-		t.Fatalf("expected review replies at the end, got %#v", result.AIMessages)
+	if !strings.Contains(result.AIMessages[3].Content, "review from") {
+		t.Fatalf("expected short message review reply at the end, got %#v", result.AIMessages)
+	}
+	result, err = svc.SendUserMessage(ctx, chat.ID, "with review, please compare these options and identify the main risk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.AIMessages) != 4 {
+		t.Fatalf("expected three first-round replies plus one review reply, got %d", len(result.AIMessages))
+	}
+	if !strings.Contains(result.AIMessages[3].Content, "review from") {
+		t.Fatalf("expected one review reply at the end, got %#v", result.AIMessages)
 	}
 }

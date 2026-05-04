@@ -156,6 +156,36 @@ func (s *MySQLStore) Migrate(ctx context.Context) error {
 			CONSTRAINT fk_token_usages_message_id FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
 			CONSTRAINT fk_token_usages_role_id FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS chat_files (
+			id BIGINT AUTO_INCREMENT PRIMARY KEY,
+			user_id BIGINT NOT NULL,
+			chat_id BIGINT NOT NULL,
+			original_name VARCHAR(255) NOT NULL,
+			storage_path VARCHAR(1024) NOT NULL,
+			content_type VARCHAR(255) NOT NULL,
+			size_bytes BIGINT NOT NULL,
+			extracted_text MEDIUMTEXT NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			INDEX idx_chat_files_user_chat_created (user_id, chat_id, created_at),
+			CONSTRAINT fk_chat_files_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+			CONSTRAINT fk_chat_files_chat_id FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS tool_executions (
+			id BIGINT AUTO_INCREMENT PRIMARY KEY,
+			user_id BIGINT NOT NULL,
+			chat_id BIGINT NOT NULL,
+			message_id BIGINT NOT NULL,
+			tool_name VARCHAR(255) NOT NULL,
+			input TEXT NOT NULL,
+			status VARCHAR(32) NOT NULL,
+			result TEXT NOT NULL,
+			error TEXT NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			INDEX idx_tool_executions_user_chat_created (user_id, chat_id, created_at),
+			CONSTRAINT fk_tool_executions_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+			CONSTRAINT fk_tool_executions_chat_id FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+			CONSTRAINT fk_tool_executions_message_id FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -444,6 +474,82 @@ func (s *MySQLStore) UpdateChatTopic(ctx context.Context, chatID int64, topic st
 		return domain.Chat{}, ErrNotFound
 	}
 	return s.GetChat(ctx, chatID)
+}
+
+func (s *MySQLStore) CreateChatFile(ctx context.Context, file domain.ChatFile) (domain.ChatFile, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return domain.ChatFile{}, err
+	}
+	res, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO chat_files (user_id, chat_id, original_name, storage_path, content_type, size_bytes, extracted_text)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		userID,
+		file.ChatID,
+		file.OriginalName,
+		file.StoragePath,
+		file.ContentType,
+		file.SizeBytes,
+		file.ExtractedText,
+	)
+	if err != nil {
+		return domain.ChatFile{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return domain.ChatFile{}, err
+	}
+	return s.getChatFile(ctx, id)
+}
+
+func (s *MySQLStore) ListChatFiles(ctx context.Context, chatID int64) ([]domain.ChatFile, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id, user_id, chat_id, original_name, storage_path, content_type, size_bytes, extracted_text, created_at
+		 FROM chat_files
+		 WHERE user_id = ? AND chat_id = ?
+		 ORDER BY created_at DESC, id DESC`,
+		userID,
+		chatID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	files := []domain.ChatFile{}
+	for rows.Next() {
+		file, err := scanChatFile(rows)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, file)
+	}
+	return files, rows.Err()
+}
+
+func (s *MySQLStore) getChatFile(ctx context.Context, id int64) (domain.ChatFile, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return domain.ChatFile{}, err
+	}
+	file, err := scanChatFile(s.db.QueryRowContext(
+		ctx,
+		`SELECT id, user_id, chat_id, original_name, storage_path, content_type, size_bytes, extracted_text, created_at
+		 FROM chat_files
+		 WHERE id = ? AND user_id = ?`,
+		id,
+		userID,
+	))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.ChatFile{}, ErrNotFound
+	}
+	return file, err
 }
 
 func (s *MySQLStore) CreateRole(ctx context.Context, role domain.Role) (domain.Role, error) {
@@ -786,6 +892,83 @@ func (s *MySQLStore) TokenUsageStats(ctx context.Context, now time.Time) (domain
 	return domain.TokenUsageStats{Today: today, Recent7: recent, ByModel: byModel}, nil
 }
 
+func (s *MySQLStore) CreateToolExecution(ctx context.Context, execution domain.ToolExecution) (domain.ToolExecution, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return domain.ToolExecution{}, err
+	}
+	res, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO tool_executions (user_id, chat_id, message_id, tool_name, input, status, result, error)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		userID,
+		execution.ChatID,
+		execution.MessageID,
+		execution.ToolName,
+		execution.Input,
+		string(execution.Status),
+		execution.Result,
+		execution.Error,
+	)
+	if err != nil {
+		return domain.ToolExecution{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return domain.ToolExecution{}, err
+	}
+	return s.getToolExecution(ctx, id)
+}
+
+func (s *MySQLStore) ListToolExecutions(ctx context.Context, chatID int64) ([]domain.ToolExecution, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id, user_id, chat_id, message_id, tool_name, input, status, result, error, created_at
+		 FROM tool_executions
+		 WHERE user_id = ? AND chat_id = ?
+		 ORDER BY created_at DESC, id DESC
+		 LIMIT 20`,
+		userID,
+		chatID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	executions := []domain.ToolExecution{}
+	for rows.Next() {
+		execution, err := scanToolExecution(rows)
+		if err != nil {
+			return nil, err
+		}
+		executions = append(executions, execution)
+	}
+	return executions, rows.Err()
+}
+
+func (s *MySQLStore) getToolExecution(ctx context.Context, id int64) (domain.ToolExecution, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return domain.ToolExecution{}, err
+	}
+	execution, err := scanToolExecution(s.db.QueryRowContext(
+		ctx,
+		`SELECT id, user_id, chat_id, message_id, tool_name, input, status, result, error, created_at
+		 FROM tool_executions
+		 WHERE id = ? AND user_id = ?`,
+		id,
+		userID,
+	))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.ToolExecution{}, ErrNotFound
+	}
+	return execution, err
+}
+
 func (s *MySQLStore) tokenUsageSummary(ctx context.Context, userID int64, since time.Time, label string) (domain.TokenUsageSummary, error) {
 	summary := domain.TokenUsageSummary{Label: label}
 	err := s.db.QueryRowContext(
@@ -873,6 +1056,14 @@ type modelConfigScanner interface {
 	Scan(dest ...any) error
 }
 
+type chatFileScanner interface {
+	Scan(dest ...any) error
+}
+
+type toolExecutionScanner interface {
+	Scan(dest ...any) error
+}
+
 func scanModelConfig(scanner modelConfigScanner) (domain.ModelConfig, error) {
 	var config domain.ModelConfig
 	var models string
@@ -881,6 +1072,24 @@ func scanModelConfig(scanner modelConfigScanner) (domain.ModelConfig, error) {
 	}
 	config.Models = splitModels(models)
 	return config, nil
+}
+
+func scanChatFile(scanner chatFileScanner) (domain.ChatFile, error) {
+	var file domain.ChatFile
+	if err := scanner.Scan(&file.ID, &file.UserID, &file.ChatID, &file.OriginalName, &file.StoragePath, &file.ContentType, &file.SizeBytes, &file.ExtractedText, &file.CreatedAt); err != nil {
+		return domain.ChatFile{}, err
+	}
+	return file, nil
+}
+
+func scanToolExecution(scanner toolExecutionScanner) (domain.ToolExecution, error) {
+	var execution domain.ToolExecution
+	var status string
+	if err := scanner.Scan(&execution.ID, &execution.UserID, &execution.ChatID, &execution.MessageID, &execution.ToolName, &execution.Input, &status, &execution.Result, &execution.Error, &execution.CreatedAt); err != nil {
+		return domain.ToolExecution{}, err
+	}
+	execution.Status = domain.ToolExecutionStatus(status)
+	return execution, nil
 }
 
 func nullInt64(value int64) any {

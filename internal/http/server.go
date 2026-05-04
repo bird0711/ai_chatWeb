@@ -7,6 +7,7 @@ import (
 	"errors"
 	"html/template"
 	"io"
+	"log"
 	"mime/multipart"
 	nethttp "net/http"
 	"os"
@@ -41,6 +42,7 @@ func NewRouter(services *app.Services, redis Pinger) *gin.Engine {
 		"stringEquals":  stringEquals,
 		"canSpeakCount": canSpeakCount,
 		"formatInt":     formatInt,
+		"configByID":    configByID,
 		"avatarText":    avatarText,
 		"isImageAvatar": isImageAvatar,
 	})
@@ -64,6 +66,8 @@ func NewRouter(services *app.Services, redis Pinger) *gin.Engine {
 	router.POST("/chats/:chatID/delete", server.deleteChat)
 	router.POST("/chats/:chatID/ai-review", server.setChatAIReview)
 	router.POST("/chats/:chatID/topic", server.setChatTopic)
+	router.POST("/chats/:chatID/files", server.uploadChatFile)
+	router.POST("/chats/:chatID/tools", server.runTool)
 	router.POST("/chats/:chatID/roles", server.addRole)
 	router.POST("/chats/:chatID/roles/:roleID", server.updateRole)
 	router.POST("/chats/:chatID/roles/:roleID/toggle-speaking", server.toggleRoleSpeaking)
@@ -108,6 +112,15 @@ func stringEquals(a, b string) bool {
 
 func formatInt(value int) string {
 	return strconv.Itoa(value)
+}
+
+func configByID(configs []domain.ModelConfig, id int64) domain.ModelConfig {
+	for _, config := range configs {
+		if config.ID == id {
+			return config
+		}
+	}
+	return domain.ModelConfig{}
 }
 
 func canSpeakCount(roles []domain.Role) int {
@@ -307,8 +320,23 @@ func (s *Server) setChatAIReview(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if _, err := s.services.SetChatAIReview(c.Request.Context(), chatID, c.PostForm("enabled") == "1"); err != nil {
+	chat, err := s.services.SetChatAIReview(c.Request.Context(), chatID, c.PostForm("enabled") == "1")
+	if err != nil {
+		logChatActionError(c, chatID, "set_ai_review", err)
+		if wantsJSON(c) {
+			c.JSON(statusForAppError(err), gin.H{"error": userFacingError(err)})
+			return
+		}
 		s.renderChatWithError(c, chatID, err)
+		return
+	}
+	if wantsJSON(c) {
+		c.JSON(nethttp.StatusOK, gin.H{
+			"chat_id":            chat.ID,
+			"ai_review_enabled":  chat.AIReviewEnabled,
+			"ai_review_status":   map[bool]string{true: "已开启", false: "已关闭"}[chat.AIReviewEnabled],
+			"ai_review_headline": map[bool]string{true: "AI 互评已开启", false: "AI 互评已关闭"}[chat.AIReviewEnabled],
+		})
 		return
 	}
 	c.Redirect(nethttp.StatusFound, "/chats/"+strconv.FormatInt(chatID, 10))
@@ -320,6 +348,7 @@ func (s *Server) setChatTopic(c *gin.Context) {
 		return
 	}
 	if _, err := s.services.SetChatTopic(c.Request.Context(), chatID, c.PostForm("topic")); err != nil {
+		logChatActionError(c, chatID, "set_topic", err)
 		s.renderChatWithError(c, chatID, err)
 		return
 	}
@@ -346,10 +375,50 @@ func (s *Server) showChat(c *gin.Context) {
 		"Chat":        detail.Chat,
 		"Roles":       detail.Roles,
 		"Messages":    detail.Messages,
+		"Files":       detail.Files,
+		"Tools":       detail.Tools,
+		"ToolDefs":    s.services.ListTools(c.Request.Context()),
 		"HasConfig":   len(configs) > 0,
 		"Configs":     configs,
 		"CurrentUser": currentUser(c),
 	})
+}
+
+func (s *Server) uploadChatFile(c *gin.Context) {
+	chatID, ok := parseChatID(c)
+	if !ok {
+		return
+	}
+	if _, err := s.services.GetChat(c.Request.Context(), chatID); err != nil {
+		logChatActionError(c, chatID, "upload_file_get_chat", err)
+		renderError(c, statusForError(err), err)
+		return
+	}
+	upload, err := saveChatFileUpload(c)
+	if err != nil {
+		logChatActionError(c, chatID, "save_file_upload", err)
+		s.renderChatWithError(c, chatID, err)
+		return
+	}
+	if _, err := s.services.AddChatFile(c.Request.Context(), chatID, upload.originalName, upload.storagePath, upload.contentType, upload.sizeBytes, upload.extractedText); err != nil {
+		logChatActionError(c, chatID, "add_chat_file", err)
+		s.renderChatWithError(c, chatID, err)
+		return
+	}
+	c.Redirect(nethttp.StatusFound, "/chats/"+strconv.FormatInt(chatID, 10))
+}
+
+func (s *Server) runTool(c *gin.Context) {
+	chatID, ok := parseChatID(c)
+	if !ok {
+		return
+	}
+	if _, err := s.services.RunTool(c.Request.Context(), chatID, c.PostForm("tool_name"), c.PostForm("tool_input")); err != nil {
+		logChatActionError(c, chatID, "run_tool", err)
+		s.renderChatWithError(c, chatID, err)
+		return
+	}
+	c.Redirect(nethttp.StatusFound, "/chats/"+strconv.FormatInt(chatID, 10))
 }
 
 func (s *Server) addRole(c *gin.Context) {
@@ -473,6 +542,7 @@ func (s *Server) sendMessageAsync(c *gin.Context) {
 	}
 	msg, err := s.services.SendUserMessageAsync(c.Request.Context(), chatID, c.PostForm("content"))
 	if err != nil {
+		logChatActionError(c, chatID, "send_message_async", err)
 		c.JSON(statusForAppError(err), gin.H{"error": userFacingError(err)})
 		return
 	}
@@ -493,6 +563,7 @@ func (s *Server) listMessageUpdates(c *gin.Context) {
 	}
 	messages, err := s.services.ListMessagesAfter(c.Request.Context(), chatID, afterID)
 	if err != nil {
+		logChatActionError(c, chatID, "list_message_updates", err)
 		c.JSON(statusForAppError(err), gin.H{"error": userFacingError(err)})
 		return
 	}
@@ -635,6 +706,7 @@ func (s *Server) showUsage(c *gin.Context) {
 func (s *Server) renderChatWithError(c *gin.Context, chatID int64, err error) {
 	detail, detailErr := s.services.GetChat(c.Request.Context(), chatID)
 	if detailErr != nil {
+		logChatActionError(c, chatID, "render_chat_error_detail", detailErr)
 		renderError(c, statusForError(detailErr), detailErr)
 		return
 	}
@@ -645,6 +717,9 @@ func (s *Server) renderChatWithError(c *gin.Context, chatID int64, err error) {
 		"Chat":        detail.Chat,
 		"Roles":       detail.Roles,
 		"Messages":    detail.Messages,
+		"Files":       detail.Files,
+		"Tools":       detail.Tools,
+		"ToolDefs":    s.services.ListTools(c.Request.Context()),
 		"HasConfig":   hasConfig,
 		"Configs":     configs,
 		"Error":       userFacingError(err),
@@ -667,6 +742,85 @@ func currentUser(c *gin.Context) domain.User {
 		return typed
 	}
 	return domain.User{}
+}
+
+type chatFileUpload struct {
+	originalName  string
+	storagePath   string
+	contentType   string
+	sizeBytes     int64
+	extractedText string
+}
+
+func saveChatFileUpload(c *gin.Context) (chatFileUpload, error) {
+	file, err := c.FormFile("chat_file")
+	if err != nil {
+		if errors.Is(err, nethttp.ErrMissingFile) {
+			return chatFileUpload{}, errors.New("file is required")
+		}
+		return chatFileUpload{}, err
+	}
+	if file.Size <= 0 {
+		return chatFileUpload{}, errors.New("file is empty")
+	}
+	if file.Size > maxChatFileBytes {
+		return chatFileUpload{}, errors.New("chat file must be 10MB or smaller")
+	}
+	ext, err := chatFileExtension(file)
+	if err != nil {
+		return chatFileUpload{}, err
+	}
+	src, err := file.Open()
+	if err != nil {
+		return chatFileUpload{}, err
+	}
+	defer src.Close()
+	raw, err := io.ReadAll(io.LimitReader(src, maxChatFileBytes+1))
+	if err != nil {
+		return chatFileUpload{}, err
+	}
+	if int64(len(raw)) > maxChatFileBytes {
+		return chatFileUpload{}, errors.New("chat file must be 10MB or smaller")
+	}
+	text, err := extractChatFileText(ext, raw)
+	if err != nil {
+		return chatFileUpload{}, err
+	}
+	name, err := randomHex(16)
+	if err != nil {
+		return chatFileUpload{}, err
+	}
+	uploadRoot := getenv("CHAT_FILE_DIR", filepath.Join("data", "chat-files"))
+	dir := uploadRoot
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return chatFileUpload{}, err
+	}
+	filename := name + ext
+	dstPath := filepath.Join(dir, filename)
+	if err := os.WriteFile(dstPath, raw, 0644); err != nil {
+		return chatFileUpload{}, err
+	}
+	contentType := file.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "text/plain"
+	}
+	return chatFileUpload{
+		originalName:  filepath.Base(file.Filename),
+		storagePath:   dstPath,
+		contentType:   contentType,
+		sizeBytes:     int64(len(raw)),
+		extractedText: text,
+	}, nil
+}
+
+func chatFileExtension(file *multipart.FileHeader) (string, error) {
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	switch ext {
+	case ".txt", ".md", ".json", ".csv", ".log", ".docx", ".pdf":
+		return ext, nil
+	default:
+		return "", errors.New("chat file must be txt, md, json, csv, log, docx, or pdf")
+	}
 }
 
 func saveAvatarUpload(c *gin.Context, existing string) (string, error) {
@@ -751,10 +905,18 @@ func parseRoleID(c *gin.Context) (int64, bool) {
 }
 
 func renderError(c *gin.Context, status int, err error) {
+	log.Printf("http_error method=%s path=%s status=%d error=%q", c.Request.Method, c.Request.URL.Path, status, userFacingError(err))
 	c.HTML(status, "error.html", gin.H{
 		"Title": "Error",
 		"Error": userFacingError(err),
 	})
+}
+
+func logChatActionError(c *gin.Context, chatID int64, action string, err error) {
+	if err == nil {
+		return
+	}
+	log.Printf("chat_action_error action=%s method=%s path=%s chat_id=%d status=%d error=%q", action, c.Request.Method, c.Request.URL.Path, chatID, statusForAppError(err), userFacingError(err))
 }
 
 func statusForError(err error) int {
