@@ -1,50 +1,17 @@
-# AI Coding Next Step
+# NEXT
 
-## Unique Recommended Next Step
+## Current State
 
-No assistant-side next step.
+当前无进行中的助手动作（No active assistant tasks）。
 
-## Current Result
+## New Task Trigger Conditions
 
-MVP V1.0 has passed real testing and is accepted.
+仅当满足以下任一条件时，才开启新任务：
 
-The user has confirmed:
+1. 出现可复现的功能缺陷或线上故障，并已提供最小复现信息。
+2. 产品目标发生变化，且需要新增能力或调整现有行为。
+3. 安全、合规或依赖升级要求触发必须改动。
+4. 性能或稳定性指标连续异常，且已确认不属于短时波动。
+5. 文档与实现出现明显偏差，影响交付或协作。
 
-- real functional testing passed;
-- main branch content has been handled;
-- the project can run normally;
-- no tag will be created;
-- no new features will be added now;
-- remaining closeout tasks will be handled by the user.
-
-## Automated Evidence
-
-Prior verification rounds recorded passing:
-
-- `go test -mod=mod ./...`
-- `go build -mod=mod -buildvcs=false ./cmd/server`
-- targeted service and HTTP tests
-- local CI script `sh scripts/ci-check.sh`
-
-## Current Acceptance Status
-
-Accepted for MVP V1.0.
-
-## Remaining Assistant Work
-
-None.
-
-## User-Owned Optional Closeout
-
-The user may independently handle any of the following if desired:
-
-- final repository housekeeping;
-- deployment to the target host;
-- remote CI confirmation after pushing;
-- operational backup and monitoring setup.
-
-These are not MVP V1.0 blockers.
-
-## Stop Conditions
-
-Do not add features or perform branch/release operations unless the user starts a new task explicitly.
+不满足以上条件时，保持收尾状态，不创建新执行项。

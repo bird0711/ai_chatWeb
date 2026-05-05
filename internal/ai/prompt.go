@@ -87,7 +87,6 @@ func BuildFileContext(files []domain.ChatFile) string {
 		if len(runes) > remaining {
 			b.WriteString(string(runes[:remaining]))
 			b.WriteString("\n[文件内容已截断]")
-			remaining = 0
 			break
 		}
 		b.WriteString(text)

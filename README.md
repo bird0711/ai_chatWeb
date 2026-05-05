@@ -48,6 +48,12 @@ go mod tidy
 sh scripts/run-local.sh
 ```
 
+Or use Make:
+
+```sh
+make run
+```
+
 Open `http://localhost:8080`.
 
 If port `8080` is already in use, `scripts/run-local.sh` automatically selects the first free port from `8081` to `8090` and prints the actual URL. You can also set a port manually:
@@ -63,5 +69,41 @@ On startup the app will create the `ai_chat` database if it does not exist, run 
 ```sh
 sh scripts/ci-check.sh
 ```
+
+Or use Make:
+
+```sh
+make check
+```
+
+## Quality Gate
+
+Before commit, run:
+
+```sh
+make check
+```
+
+Equivalent commands:
+
+```sh
+go fmt ./...
+go test ./...
+go vet ./...
+golangci-lint run ./...
+```
+
+Current local status:
+
+- `go test ./...` passes
+- `go vet ./...` passes
+- `golangci-lint run ./...` passes
+
+Latest coverage snapshot (`go test ./... -cover`):
+
+- `internal/store`: `73.0%`
+- `internal/app`: `70.4%`
+- `internal/ai`: `59.9%`
+- `internal/http`: `58.0%`
 
 The same test/build gate is documented in `docs/ai/ci.md`.

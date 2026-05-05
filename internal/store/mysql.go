@@ -63,6 +63,26 @@ func (s *MySQLStore) Close() error {
 	return s.db.Close()
 }
 
+func (s *MySQLStore) ClearAllTables(ctx context.Context) error {
+	tables := []string{
+		"token_usages",
+		"tool_executions",
+		"chat_files",
+		"messages",
+		"roles",
+		"chats",
+		"model_configs",
+		"sessions",
+		"users",
+	}
+	for _, table := range tables {
+		if _, err := s.db.ExecContext(ctx, "DELETE FROM "+table); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *MySQLStore) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
@@ -666,7 +686,9 @@ func (s *MySQLStore) SaveModelConfig(ctx context.Context, config domain.ModelCon
 	if err != nil {
 		return domain.ModelConfig{}, err
 	}
-	defer tx.Rollback()
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
 	res, err := tx.ExecContext(ctx, `INSERT INTO model_configs (user_id, name, provider, base_url, api_key, default_model, models) VALUES (?, ?, ?, ?, ?, ?, ?)`, config.UserID, config.Name, config.Provider, config.BaseURL, config.APIKey, config.DefaultModel, strings.Join(config.Models, "\n"))
 	if err != nil {
