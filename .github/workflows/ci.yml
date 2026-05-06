@@ -34,4 +34,9 @@ jobs:
           args: --timeout=5m ./...
 
       - name: Build server
-        run: go build -mod=mod -buildvcs=false ./cmd/server
+        run: |
+          pwd
+          ls -la
+          ls -la cmd
+          go build -mod=mod -buildvcs=false ./cmd/server/main.go
+
