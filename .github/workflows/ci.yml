@@ -17,8 +17,21 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Check format
+        run: |
+          test -z "$(gofmt -l .)"
+
       - name: Run tests
         run: go test -mod=mod ./...
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m ./...
 
       - name: Build server
         run: go build -mod=mod -buildvcs=false ./cmd/server
