@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
+	"log"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -169,7 +170,11 @@ func inflatePDFStream(raw []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer reader.Close()
+	defer func() {
+		if err := reader.Close(); err != nil {
+			log.Printf("error closing reader: %v", err)
+		}
+	}()
 	return io.ReadAll(io.LimitReader(reader, maxChatFileBytes))
 }
 

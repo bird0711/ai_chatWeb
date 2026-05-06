@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -51,7 +52,11 @@ func EnsureMySQLDatabase(ctx context.Context, cfg MySQLConfig) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("error closing db: %v", err)
+		}
+	}()
 	if err := db.PingContext(ctx); err != nil {
 		return err
 	}
@@ -307,7 +312,11 @@ func (s *MySQLStore) assignLegacyRoleModelConfigs(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing rows: %v", err)
+		}
+	}()
 
 	type legacyRole struct {
 		roleID int64
@@ -412,7 +421,11 @@ func (s *MySQLStore) ListChats(ctx context.Context) ([]domain.Chat, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing rows: %v", err)
+		}
+	}()
 
 	var chats []domain.Chat
 	for rows.Next() {
@@ -540,7 +553,11 @@ func (s *MySQLStore) ListChatFiles(ctx context.Context, chatID int64) ([]domain.
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing rows: %v", err)
+		}
+	}()
 
 	files := []domain.ChatFile{}
 	for rows.Next() {
@@ -610,7 +627,11 @@ func (s *MySQLStore) ListRoles(ctx context.Context, chatID int64) ([]domain.Role
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing rows: %v", err)
+		}
+	}()
 
 	var roles []domain.Role
 	for rows.Next() {
@@ -729,7 +750,11 @@ func (s *MySQLStore) ListModelConfigs(ctx context.Context) ([]domain.ModelConfig
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing rows: %v", err)
+		}
+	}()
 
 	configs := []domain.ModelConfig{}
 	for rows.Next() {
@@ -846,7 +871,11 @@ func (s *MySQLStore) listMessages(ctx context.Context, query string, args ...any
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing rows: %v", err)
+		}
+	}()
 
 	var messages []domain.Message
 	for rows.Next() {
@@ -960,7 +989,11 @@ func (s *MySQLStore) ListToolExecutions(ctx context.Context, chatID int64) ([]do
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing rows: %v", err)
+		}
+	}()
 	executions := []domain.ToolExecution{}
 	for rows.Next() {
 		execution, err := scanToolExecution(rows)
@@ -1018,7 +1051,11 @@ func (s *MySQLStore) tokenUsageByModel(ctx context.Context, userID int64, since 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing rows: %v", err)
+		}
+	}()
 	var summaries []domain.TokenUsageSummary
 	for rows.Next() {
 		var summary domain.TokenUsageSummary

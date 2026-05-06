@@ -774,7 +774,11 @@ func saveChatFileUpload(c *gin.Context) (chatFileUpload, error) {
 	if err != nil {
 		return chatFileUpload{}, err
 	}
-	defer src.Close()
+	defer func() {
+		if err := src.Close(); err != nil {
+			log.Printf("error closing src: %v", err)
+		}
+	}()
 	raw, err := io.ReadAll(io.LimitReader(src, maxChatFileBytes+1))
 	if err != nil {
 		return chatFileUpload{}, err
@@ -855,13 +859,21 @@ func saveAvatarUpload(c *gin.Context, existing string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer src.Close()
+	defer func() {
+		if err := src.Close(); err != nil {
+			log.Printf("error closing src: %v", err)
+		}
+	}()
 	dstPath := filepath.Join(dir, filename)
 	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
 	if err != nil {
 		return "", err
 	}
-	defer dst.Close()
+	defer func() {
+		if err := dst.Close(); err != nil {
+			log.Printf("error closing dst: %v", err)
+		}
+	}()
 	if _, err := io.Copy(dst, src); err != nil {
 		return "", err
 	}
