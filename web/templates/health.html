@@ -17,6 +17,7 @@
       <a href="/health">系统状态</a>
       <button type="button" class="button-secondary button-small theme-toggle" data-theme-toggle>黑夜模式</button>
       <form method="post" action="/logout" class="nav-form">
+        <input type="hidden" name="csrf_token" value="">
         <span>{{ .CurrentUser.Email }}</span>
         <button type="submit" class="button-secondary button-small">退出</button>
       </form>

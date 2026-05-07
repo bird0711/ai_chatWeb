@@ -51,7 +51,13 @@
       fetch(asyncAction, {
         method: "POST",
         body: payload,
-        headers: {"Accept": "application/json"}
+        // ======================
+        // ① 发消息请求加 CSRF
+        // ======================
+        headers: {
+          "Accept": "application/json",
+          "X-CSRF-Token": csrfToken()
+        }
       })
         .then(function (response) {
           return response.json().then(function (body) {
@@ -350,7 +356,13 @@
         fetch(reviewForm.action, {
           method: "POST",
           body: payload,
-          headers: {"Accept": "application/json"}
+          // ======================
+          // ② AI 互评请求加 CSRF
+          // ======================
+          headers: {
+            "Accept": "application/json",
+            "X-CSRF-Token": csrfToken()
+          }
         })
           .then(function (response) {
             return response.json().then(function (body) {
@@ -519,4 +531,35 @@
 
   confirmForms();
   setupChat();
+
+  // ======================
+  // ③ 初始化自动填充所有表单 CSRF
+  // ======================
+  applyCSRFTokens();
 })();
+
+function readCookie(name) {
+  var prefix = name + "=";
+  var parts = document.cookie ? document.cookie.split(";") : [];
+  for (var i = 0; i < parts.length; i += 1) {
+    var part = parts[i].trim();
+    if (part.indexOf(prefix) === 0) {
+      return decodeURIComponent(part.slice(prefix.length));
+    }
+  }
+  return "";
+}
+
+function csrfToken() {
+  return readCookie("csrf_token");
+}
+
+function applyCSRFTokens() {
+  var token = csrfToken();
+  if (!token) {
+    return;
+  }
+  document.querySelectorAll("input[name='csrf_token']").forEach(function (input) {
+    input.value = token;
+  });
+}
