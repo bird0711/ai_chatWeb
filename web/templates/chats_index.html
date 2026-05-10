@@ -55,6 +55,7 @@
               <span>进入</span>
             </a>
             <form method="post" action="/chats/{{ .ID }}/delete" data-confirm="确认删除这个群聊？">
+        <input type="hidden" name="csrf_token" value="">
               <input type="hidden" name="csrf_token" value="">
               <button type="submit" class="button-danger">删除</button>
             </form>

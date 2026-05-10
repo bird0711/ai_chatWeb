@@ -9,20 +9,21 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/chats">AI 群聊</a>
+    <a class="brand" href="/chats">AI 缇よ亰</a>
     <nav>
-      <a href="/chats">群聊</a>
-      <a href="/settings/model">模型设置</a>
-      <a href="/usage">Token 统计</a>
-      <a href="/health">系统状态</a>
-      <button type="button" class="button-secondary button-small theme-toggle" data-theme-toggle>黑夜模式</button>
+      <a href="/chats">缇よ亰</a>
+      <a href="/settings/model">妯″瀷璁剧疆</a>
+      <a href="/usage">Token 缁熻</a>
+      <a href="/health">绯荤粺鐘舵€?</a>
+      <button type="button" class="button-secondary button-small theme-toggle" data-theme-toggle>榛戝妯″紡</button>
     </nav>
   </header>
   <main class="shell">
     <section class="panel">
-      <h1>请求失败</h1>
+      <h1>璇锋眰澶辫触</h1>
       <p>{{ .Error }}</p>
-      <a class="button-secondary" href="/chats">返回群聊</a>
+      {{ if .RequestID }}<p>Request ID: <code>{{ .RequestID }}</code></p>{{ end }}
+      <a class="button-secondary" href="/chats">杩斿洖缇よ亰</a>
     </section>
   </main>
   <script src="/static/theme.js"></script>

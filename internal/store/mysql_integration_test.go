@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package store
 
 import (
@@ -26,40 +29,45 @@ func getTestDSN() string {
 	}
 	port := os.Getenv("MYSQL_PORT")
 	if port == "" {
-		port = "3306"
+		port = "3307"
 	}
 	database := "ai_chat_test"
 	return MySQLDSN(user, password, host, port, database)
 }
 
-// skipIfNoMySQL skips the test if MySQL is not available.
-// It also clears all tables to ensure a clean state.
-func skipIfNoMySQL(t *testing.T) *MySQLStore {
+// requireMySQLStore opens a real MySQL store for integration tests.
+// It recreates a clean schema before each test.
+func requireMySQLStore(t *testing.T) *MySQLStore {
 	t.Helper()
 	ctx := context.Background()
 	cfg := MySQLConfig{
 		User:     "root",
 		Password: "4399",
 		Host:     "localhost",
-		Port:     "3306",
+		Port:     "3307",
 		Database: "ai_chat_test",
 	}
 	if err := EnsureMySQLDatabase(ctx, cfg); err != nil {
-		t.Skipf("MySQL not available: %v", err)
+		t.Fatalf("MySQL not available: %v", err)
 	}
 	store, err := OpenMySQL(getTestDSN())
 	if err != nil {
-		t.Skipf("Failed to open MySQL: %v", err)
+		t.Fatalf("Failed to open MySQL: %v", err)
+	}
+
+	// Ensure tables exist before cleanup on a fresh test database.
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("Initial migrate failed: %v", err)
 	}
 
 	// Clear all tables to ensure clean state
 	if err := store.ClearAllTables(ctx); err != nil {
-		t.Skipf("Failed to clear tables: %v", err)
+		t.Fatalf("Failed to clear tables: %v", err)
 	}
 
 	// Run migrations
 	if err := store.Migrate(ctx); err != nil {
-		t.Skipf("Migrate failed: %v", err)
+		t.Fatalf("Migrate failed: %v", err)
 	}
 
 	t.Cleanup(func() {
@@ -69,7 +77,7 @@ func skipIfNoMySQL(t *testing.T) *MySQLStore {
 }
 
 func TestMySQLOpenAndPing(t *testing.T) {
-	store := skipIfNoMySQL(t)
+	store := requireMySQLStore(t)
 	ctx := context.Background()
 	if err := store.Ping(ctx); err != nil {
 		t.Fatalf("Ping failed: %v", err)
@@ -77,12 +85,12 @@ func TestMySQLOpenAndPing(t *testing.T) {
 }
 
 func TestMySQLMigrate(t *testing.T) {
-	_ = skipIfNoMySQL(t)
-	// Migration already done in skipIfNoMySQL
+	_ = requireMySQLStore(t)
+	// Migration already done in requireMySQLStore
 }
 
 func TestMySQLCreateAndGetUser(t *testing.T) {
-	store := skipIfNoMySQL(t)
+	store := requireMySQLStore(t)
 	ctx := context.Background()
 
 	// Create user
@@ -119,7 +127,7 @@ func TestMySQLCreateAndGetUser(t *testing.T) {
 }
 
 func TestMySQLSessionOps(t *testing.T) {
-	store := skipIfNoMySQL(t)
+	store := requireMySQLStore(t)
 	ctx := context.Background()
 
 	// Create user
@@ -161,7 +169,7 @@ func TestMySQLSessionOps(t *testing.T) {
 }
 
 func TestMySQLCreateAndGetChat(t *testing.T) {
-	store := skipIfNoMySQL(t)
+	store := requireMySQLStore(t)
 	ctx := context.Background()
 
 	// Create user
@@ -218,7 +226,7 @@ func TestMySQLCreateAndGetChat(t *testing.T) {
 }
 
 func TestMySQLCreateAndListRoles(t *testing.T) {
-	store := skipIfNoMySQL(t)
+	store := requireMySQLStore(t)
 	ctx := context.Background()
 
 	// Create user
@@ -294,7 +302,7 @@ func TestMySQLCreateAndListRoles(t *testing.T) {
 }
 
 func TestMySQLModelConfigs(t *testing.T) {
-	store := skipIfNoMySQL(t)
+	store := requireMySQLStore(t)
 	ctx := context.Background()
 
 	// Create user
@@ -360,7 +368,7 @@ func TestMySQLModelConfigs(t *testing.T) {
 }
 
 func TestMySQLCreateAndListMessages(t *testing.T) {
-	store := skipIfNoMySQL(t)
+	store := requireMySQLStore(t)
 	ctx := context.Background()
 
 	// Create user
@@ -423,7 +431,7 @@ func TestMySQLCreateAndListMessages(t *testing.T) {
 }
 
 func TestMySQLChatFileOps(t *testing.T) {
-	store := skipIfNoMySQL(t)
+	store := requireMySQLStore(t)
 	ctx := context.Background()
 
 	// Create user
@@ -467,7 +475,7 @@ func TestMySQLChatFileOps(t *testing.T) {
 }
 
 func TestMySQLTokenUsage(t *testing.T) {
-	store := skipIfNoMySQL(t)
+	store := requireMySQLStore(t)
 	ctx := context.Background()
 
 	// Create user
@@ -521,7 +529,7 @@ func TestMySQLTokenUsage(t *testing.T) {
 }
 
 func TestMySQLToolExecution(t *testing.T) {
-	store := skipIfNoMySQL(t)
+	store := requireMySQLStore(t)
 	ctx := context.Background()
 
 	// Create user
@@ -575,7 +583,7 @@ func TestMySQLToolExecution(t *testing.T) {
 }
 
 func TestMySQLDeleteChat(t *testing.T) {
-	store := skipIfNoMySQL(t)
+	store := requireMySQLStore(t)
 	ctx := context.Background()
 
 	// Create user

@@ -9,27 +9,27 @@ import (
 )
 
 type Config struct {
-	Addr         string
-	MySQLDSN     string
-	MySQLUser    string
+	Addr          string
+	MySQLDSN      string
+	MySQLUser     string
 	MySQLPassword string
-	MySQLHost    string
-	MySQLPort    string
+	MySQLHost     string
+	MySQLPort     string
 	MySQLDatabase string
 
 	RedisAddr     string
 	RedisPassword string
 	RedisDB       int
 
-	ChatFileDir string
-	UploadDir   string
-	StaticDir   string
+	ChatFileDir  string
+	UploadDir    string
+	StaticDir    string
 	TemplateGlob string
 
-	ModelAPITimeout            time.Duration
+	ModelAPITimeout             time.Duration
 	ModelAPITLSHandshakeTimeout time.Duration
-	ModelAPIRetryAttempts      int
-	ModelAPIRetryBackoff       time.Duration
+	ModelAPIRetryAttempts       int
+	ModelAPIRetryBackoff        time.Duration
 }
 
 func Load() (Config, error) {

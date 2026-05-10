@@ -1,0 +1,9 @@
+.git
+.github
+.codex
+.agents
+.cache
+data
+uploads
+server
+*.log

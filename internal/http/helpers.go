@@ -1,13 +1,22 @@
 package http
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"ai_chat/internal/domain"
 
 	"github.com/gin-gonic/gin"
+)
+
+const (
+	requestIDHeaderName = "X-Request-ID"
+	requestIDContextKey = "RequestID"
+	maxRequestIDLength  = 64
 )
 
 func roleIDValue(id *int64) int64 {
@@ -87,6 +96,14 @@ func currentUser(c *gin.Context) domain.User {
 	return domain.User{}
 }
 
+func requestID(c *gin.Context) string {
+	value, _ := c.Get(requestIDContextKey)
+	if typed, ok := value.(string); ok {
+		return typed
+	}
+	return ""
+}
+
 func getenv(key, fallback string) string {
 	value := os.Getenv(key)
 	if value == "" {
@@ -108,4 +125,38 @@ func getenvBool(key string, fallback bool) bool {
 	default:
 		return fallback
 	}
+}
+
+func randomTokenHex(bytesLen int) (string, error) {
+	buf := make([]byte, bytesLen)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
+}
+
+func newRequestID() string {
+	token, err := randomTokenHex(8)
+	if err == nil {
+		return token
+	}
+	return strconv.FormatInt(time.Now().UnixNano(), 16)
+}
+
+func normalizeRequestID(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > maxRequestIDLength {
+		return ""
+	}
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-', r == '_', r == '.':
+		default:
+			return ""
+		}
+	}
+	return value
 }

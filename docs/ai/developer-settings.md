@@ -35,20 +35,48 @@ Use `.env.example` as the reference for local configuration. The current run scr
 
 For self-hosted deployment guidance beyond local development, see `docs/ai/deployment.md`.
 
-## Local Startup
+## Recommended Local Startup
 
 From the repository root:
 
 ```sh
-go mod tidy
-sh scripts/run-local.sh
+make dev-deps-up
+make dev-run
 ```
 
-The run script:
+This is the preferred daily development mode:
+
+- MySQL and Redis run in Docker.
+- The Go app runs on the host.
+- Host ports default to `3307` for MySQL and `6380` for Redis to avoid collisions with an existing local install.
+
+`make dev-run` delegates to `scripts/run-dev.sh`, which exports development-safe defaults and then calls `scripts/run-local.sh`.
+
+The local run script:
 
 - sets local defaults for MySQL and Redis.
 - chooses the first free port from `8080` to `8090` when `ADDR` is not set.
 - starts the Gin server with `go run -mod=mod -buildvcs=false ./cmd/server`.
+
+## Alternative Startup Modes
+
+### Pure local services
+
+If you already have MySQL and Redis running directly on the host, you can start the app without Docker:
+
+```sh
+make run
+```
+
+### Full Docker stack
+
+If you want to validate the delivery shape instead of doing daily coding:
+
+```sh
+make stack-up
+```
+
+This runs `app`, `mysql`, and `redis` together inside Docker Compose.
 
 If all default ports are busy, choose a port manually:
 
@@ -158,6 +186,12 @@ If startup reports a MySQL TCP socket error, confirm MySQL is running and reacha
 mysql -h127.0.0.1 -P3306 -uroot -p4399 -D ai_chat
 ```
 
+If you are using the recommended Docker dev dependencies mode, check the mapped development port instead:
+
+```sh
+mysql -h127.0.0.1 -P3307 -uroot -p4399 -D ai_chat
+```
+
 ### Redis connection errors
 
 Confirm Redis is running and the password/database match:
@@ -165,6 +199,8 @@ Confirm Redis is running and the password/database match:
 ```sh
 redis-cli -h 127.0.0.1 -p 6379 -a 4399 ping
 ```
+
+If you are using the recommended Docker dev dependencies mode, check port `6380` instead.
 
 ### Port already in use
 

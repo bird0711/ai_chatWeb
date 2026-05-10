@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -56,7 +57,7 @@ func (s *Server) setChatAIReview(c *gin.Context) {
 	if err != nil {
 		logChatActionError(c, chatID, "set_ai_review", err)
 		if wantsJSON(c) {
-			c.JSON(statusForAppError(err), gin.H{"error": userFacingError(err)})
+			renderJSONError(c, statusForAppError(err), err)
 			return
 		}
 		s.renderChatWithError(c, chatID, err)
@@ -275,7 +276,7 @@ func (s *Server) sendMessageAsync(c *gin.Context) {
 	msg, err := s.services.SendUserMessageAsync(c.Request.Context(), chatID, c.PostForm("content"))
 	if err != nil {
 		logChatActionError(c, chatID, "send_message_async", err)
-		c.JSON(statusForAppError(err), gin.H{"error": userFacingError(err)})
+		renderJSONError(c, statusForAppError(err), err)
 		return
 	}
 	c.JSON(nethttp.StatusAccepted, gin.H{
@@ -290,13 +291,13 @@ func (s *Server) listMessageUpdates(c *gin.Context) {
 	}
 	afterID, err := strconv.ParseInt(c.DefaultQuery("after_id", "0"), 10, 64)
 	if err != nil || afterID < 0 {
-		c.JSON(nethttp.StatusBadRequest, gin.H{"error": "invalid after_id"})
+		renderJSONError(c, nethttp.StatusBadRequest, errors.New("invalid after_id"))
 		return
 	}
 	messages, err := s.services.ListMessagesAfter(c.Request.Context(), chatID, afterID)
 	if err != nil {
 		logChatActionError(c, chatID, "list_message_updates", err)
-		c.JSON(statusForAppError(err), gin.H{"error": userFacingError(err)})
+		renderJSONError(c, statusForAppError(err), err)
 		return
 	}
 	c.JSON(nethttp.StatusOK, gin.H{

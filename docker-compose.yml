@@ -1,0 +1,80 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+        http_proxy: ${http_proxy:-}
+        https_proxy: ${https_proxy:-}
+        no_proxy: ${no_proxy:-}
+    container_name: ai_chat_app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ADDR: ":8080"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: 4399
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: ai_chat
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: 4399
+      REDIS_DB: "0"
+      TEMPLATE_GLOB: web/templates/*.html
+      STATIC_DIR: web/static
+      UPLOAD_DIR: uploads
+      CHAT_FILE_DIR: data/chat-files
+      COOKIE_SECURE: "false"
+      MODEL_API_TIMEOUT_SECONDS: "90"
+      MODEL_API_TLS_HANDSHAKE_TIMEOUT_SECONDS: "30"
+      MODEL_API_RETRY_ATTEMPTS: "2"
+      MODEL_API_RETRY_BACKOFF_MS: "800"
+    ports:
+      - "8080:8080"
+    volumes:
+      - app_uploads:/app/uploads
+      - app_chat_files:/app/data
+
+  mysql:
+    image: mysql:8.4
+    container_name: ai_chat_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 4399
+      MYSQL_DATABASE: ai_chat
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:7.2
+    container_name: ai_chat_redis
+    restart: unless-stopped
+    command: redis-server --requirepass 4399
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a 4399 ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    volumes:
+      - redis_data:/data
+
+volumes:
+  mysql_data:
+  redis_data:
+  app_uploads:
+  app_chat_files:

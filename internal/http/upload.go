@@ -1,8 +1,6 @@
 package http
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"io"
 	"log"
@@ -57,26 +55,23 @@ func saveChatFileUpload(c *gin.Context) (chatFileUpload, error) {
 	if int64(len(raw)) > maxChatFileBytes {
 		return chatFileUpload{}, errors.New("chat file must be 10MB or smaller")
 	}
-
 	if err := validateChatFileContent(ext, raw); err != nil {
-	return chatFileUpload{}, err
-}
-
+		return chatFileUpload{}, err
+	}
 	text, err := extractChatFileText(ext, raw)
 	if err != nil {
 		return chatFileUpload{}, err
 	}
-	name, err := randomHex(16)
+	name, err := randomTokenHex(16)
 	if err != nil {
 		return chatFileUpload{}, err
 	}
 	uploadRoot := getenv("CHAT_FILE_DIR", filepath.Join("data", "chat-files"))
-	dir := uploadRoot
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(uploadRoot, 0755); err != nil {
 		return chatFileUpload{}, err
 	}
 	filename := name + ext
-	dstPath := filepath.Join(dir, filename)
+	dstPath := filepath.Join(uploadRoot, filename)
 	if err := os.WriteFile(dstPath, raw, 0644); err != nil {
 		return chatFileUpload{}, err
 	}
@@ -121,16 +116,11 @@ func saveAvatarUpload(c *gin.Context, existing string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	name, err := randomHex(16)
-	if err != nil {
-		return "", err
-	}
 	uploadRoot := getenv("UPLOAD_DIR", "uploads")
 	dir := filepath.Join(uploadRoot, "avatars")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", err
 	}
-	filename := name + ext
 	src, err := file.Open()
 	if err != nil {
 		return "", err
@@ -141,7 +131,7 @@ func saveAvatarUpload(c *gin.Context, existing string) (string, error) {
 		}
 	}()
 
-		head := make([]byte, 512)
+	head := make([]byte, 512)
 	n, err := src.Read(head)
 	if err != nil && !errors.Is(err, io.EOF) {
 		return "", err
@@ -153,6 +143,11 @@ func saveAvatarUpload(c *gin.Context, existing string) (string, error) {
 		return "", err
 	}
 
+	name, err := randomTokenHex(16)
+	if err != nil {
+		return "", err
+	}
+	filename := name + ext
 	dstPath := filepath.Join(dir, filename)
 	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
 	if err != nil {
@@ -177,14 +172,6 @@ func avatarExtension(file *multipart.FileHeader) (string, error) {
 	default:
 		return "", errors.New("avatar image must be jpg, png, gif, or webp")
 	}
-}
-
-func randomHex(bytesLen int) (string, error) {
-	buf := make([]byte, bytesLen)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(buf), nil
 }
 
 func validateChatFileContent(ext string, raw []byte) error {

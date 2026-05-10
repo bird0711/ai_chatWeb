@@ -2,93 +2,55 @@
 
 ## Current Task Type
 
-V1.0 final acceptance / project closeout.
-
-## Current Mode
-
-Standard
+Incremental engineering improvement pass.
 
 ## Current Phase
 
-Closed after MVP V1.0 acceptance.
+Step 13 completed: request-level observability baseline.
 
 ## Current Goal
 
-Record that MVP V1.0 has passed real user testing and that no further feature work is planned in this round.
+Keep the repository easier to release, hand off, and troubleshoot with explicit checklists plus request-level diagnostics.
 
-## Current Deliverability
+## Completed Steps
 
-MVP V1.0 is complete and accepted.
+1. Unified configuration loading.
+2. `main.go` uses the unified config object.
+3. Startup initialization split out of `main.go`.
+4. Standard `http.Server` and graceful shutdown.
+5. HTTP layer split from one large file into focused handlers/helpers.
+6. Web security baseline: secure session cookie, CSRF, upload content validation.
+7. Containerization: Dockerfile, Compose stack, dependency healthchecks, persistent volumes.
+8. Real-dependency integration tests for MySQL, Redis, and the main HTTP flow.
+9. Local development entrypoints unified around Make and Docker-backed dependencies.
+10. CI structure cleaned up into `verify`, `build`, and `integration`.
+11. Contributor-facing documentation and handoff cleanup.
+12. Release checklist and operations/troubleshooting guidance.
+13. Request ID and panic-recovery observability baseline.
 
-The user has confirmed:
+## Current Working Model
 
-- Real browser testing passed.
-- Real model/API behavior passed.
-- Main branch content has been handled and can run normally.
-- No release tag will be added.
-- No more features will be added in this closeout round.
-- Remaining operational closeout tasks will be handled by the user.
+- Preferred daily development: host-side Go app plus Docker MySQL/Redis.
+- Full Docker stack: validation and handoff path, not the primary editing loop.
+- Integration tests: real dependencies behind the `integration` build tag.
 
-## External Decision Required
+## Recent Verified Commands
 
-No external product decision is required from the assistant.
+- `make check`
+- `make integration`
+- `make dev-deps-up`
+- `make dev-deps-ps`
+- `make dev-deps-down`
 
-## Completed
+## Current Risks
 
-- Core AI group chat MVP is complete.
-- User login and account isolation are complete.
-- Model API configuration and per-role model routing are complete.
-- AI role create/edit/delete, avatar, speaking permission, and reasoning effort are complete.
-- Async chat sending, polling, no-refresh AI replies, and current-page AI review visibility are complete.
-- AI-to-AI review is complete and verified by the user.
-- Topic guidance, theme mode, responsive chat UI, history filtering, and Token usage statistics are complete.
-- File upload and AI file-context analysis are complete for the V1.0 supported file scope.
-- Controlled tools are complete for the V1.0 supported tool scope.
-- Deployment, CI, developer settings, and observability documents are present.
-- Automated tests and build checks have passed in prior verification rounds.
-- Real user-side testing has passed.
-
-## Verified
-
-- User reports all real tests pass.
-- User reports the current main branch content has been handled and runs normally.
-- Latest documented automated evidence includes:
-  - `go test -mod=mod ./...`
-  - `go build -mod=mod -buildvcs=false ./cmd/server`
-  - targeted `internal/app`, `internal/http`, and `internal/ai` tests
-  - local CI script `sh scripts/ci-check.sh`
-
-## Not Completed
-
-No MVP V1.0 blocking item remains.
-
-## Not Planned In This Closeout
-
-- Release tag creation.
-- New feature development.
-- Additional assistant-driven production deployment.
-- Additional assistant-driven merge or branch operations.
-
-## Non-Blocking Future Enhancements
-
-Future enhancements are tracked only as optional backlog items and do not block V1.0:
-
-- file delete/preview/OCR/vector retrieval
-- model-driven automatic tool calling
-- automatic provider failover/load balancing/cost routing
-- structured logs, metrics, alerts, request IDs, tracing
-- browser E2E automation
-- production-grade secret management
-- plugin/community features
+- Contributor-facing docs must stay aligned with the actual Make targets and scripts as future steps change workflows.
+- Observability is better at request tracing now, but still lacks metrics, structured log output, and async correlation.
 
 ## Blockers
 
-None for MVP V1.0 closeout.
-
-## Deliverable Status
-
-MVP V1.0 is complete, accepted, and ready to be treated as the finished baseline for this project stage.
+None.
 
 ## Next Recommendation
 
-No assistant action is required unless the user opens a new task. User-owned closeout may continue outside this session.
+Start Step 14 by choosing between deeper observability follow-through or more automation around deployment/release workflow support.

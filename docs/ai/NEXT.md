@@ -2,16 +2,21 @@
 
 ## Current State
 
-当前无进行中的助手动作（No active assistant tasks）。
+Step 13 is complete: request-level observability baseline.
 
-## New Task Trigger Conditions
+## Next Recommended Step
 
-仅当满足以下任一条件时，才开启新任务：
+Step 14 should choose one of the next operational maturity directions:
 
-1. 出现可复现的功能缺陷或线上故障，并已提供最小复现信息。
-2. 产品目标发生变化，且需要新增能力或调整现有行为。
-3. 安全、合规或依赖升级要求触发必须改动。
-4. 性能或稳定性指标连续异常，且已确认不属于短时波动。
-5. 文档与实现出现明显偏差，影响交付或协作。
+1. tighten deployment examples so they match the final container and host-side workflows exactly
+2. continue observability from request IDs into metrics, structured logs, and async correlation
+3. add more automation around release verification or deployment preparation
 
-不满足以上条件时，保持收尾状态，不创建新执行项。
+## Task Trigger Rule
+
+Open a new engineering step when one of these is true:
+
+1. documentation and real behavior diverge
+2. a reproducible bug appears
+3. a new quality gate or workflow is needed
+4. deployment or operations gaps block handoff

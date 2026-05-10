@@ -1,0 +1,11 @@
+services:
+  mysql:
+    ports:
+      - "${TEST_MYSQL_PORT:-3307}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: 4399
+      MYSQL_DATABASE: ai_chat_test
+
+  redis:
+    ports:
+      - "${TEST_REDIS_PORT:-6380}:6379"

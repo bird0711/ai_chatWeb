@@ -17,6 +17,8 @@ import (
 	"ai_chat/internal/ai"
 	"ai_chat/internal/app"
 	"ai_chat/internal/domain"
+
+	"github.com/gin-gonic/gin"
 )
 
 type fakeStore struct {
@@ -717,10 +719,84 @@ func TestChatActionErrorsAreLogged(t *testing.T) {
 	defer log.SetOutput(previous)
 
 	assertStatus(t, router, client, http.MethodPost, "/chats/1/messages/async", url.Values{"content": {"blocked"}}, http.StatusBadRequest)
-	for _, expected := range []string{"chat_action_error", "send_message_async", "chat_id=1", "status=400"} {
+	for _, expected := range []string{"chat_action_error", "send_message_async", "chat_id=1", "status=400", "request_id="} {
 		if !strings.Contains(logs.String(), expected) {
 			t.Fatalf("expected log output to contain %q, got %s", expected, logs.String())
 		}
+	}
+}
+
+func TestRequestIDHeaderOnSuccessfulRequest(t *testing.T) {
+	t.Setenv("TEMPLATE_GLOB", "../../web/templates/*.html")
+	t.Setenv("STATIC_DIR", "../../web/static")
+	router := NewRouter(app.NewServices(newFakeStore(), fakeAI{}), fakeRedis{})
+
+	rec := assertStatus(t, router, nil, http.MethodGet, "/login", nil, http.StatusOK)
+	if strings.TrimSpace(rec.Header().Get(requestIDHeaderName)) == "" {
+		t.Fatalf("expected %s header on successful request", requestIDHeaderName)
+	}
+}
+
+func TestRequestIDAppearsInHTMLErrorPage(t *testing.T) {
+	t.Setenv("TEMPLATE_GLOB", "../../web/templates/*.html")
+	t.Setenv("STATIC_DIR", "../../web/static")
+	router := NewRouter(app.NewServices(newFakeStore(), fakeAI{}), fakeRedis{})
+	client := newTestClient()
+
+	assertStatus(t, router, client, http.MethodPost, "/register", url.Values{"email": {"requestid-html@example.test"}, "password": {"secret1"}}, http.StatusFound)
+	rec := assertStatus(t, router, client, http.MethodGet, "/chats/not-a-number", nil, http.StatusBadRequest)
+
+	requestID := strings.TrimSpace(rec.Header().Get(requestIDHeaderName))
+	if requestID == "" {
+		t.Fatalf("expected %s header on HTML error response", requestIDHeaderName)
+	}
+	if !strings.Contains(rec.Body.String(), requestID) {
+		t.Fatalf("expected error page to contain request ID %q, body: %s", requestID, rec.Body.String())
+	}
+}
+
+func TestRequestIDAppearsInJSONErrorResponse(t *testing.T) {
+	t.Setenv("TEMPLATE_GLOB", "../../web/templates/*.html")
+	t.Setenv("STATIC_DIR", "../../web/static")
+	router := NewRouter(app.NewServices(newFakeStore(), fakeAI{}), fakeRedis{})
+	client := newTestClient()
+
+	assertStatus(t, router, client, http.MethodPost, "/register", url.Values{"email": {"requestid-json@example.test"}, "password": {"secret1"}}, http.StatusFound)
+	assertStatus(t, router, client, http.MethodPost, "/chats", url.Values{"name": {"Request ID Chat"}}, http.StatusFound)
+
+	rec := assertStatus(t, router, client, http.MethodPost, "/chats/1/messages/async", url.Values{"content": {"blocked"}}, http.StatusBadRequest)
+	requestID := strings.TrimSpace(rec.Header().Get(requestIDHeaderName))
+	if requestID == "" {
+		t.Fatalf("expected %s header on JSON error response", requestIDHeaderName)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("expected JSON body, got %s: %v", rec.Body.String(), err)
+	}
+	if body["request_id"] != requestID {
+		t.Fatalf("expected request_id %q in JSON body, got %#v", requestID, body["request_id"])
+	}
+}
+
+func TestPanicRecoveryIncludesRequestID(t *testing.T) {
+	t.Setenv("TEMPLATE_GLOB", "../../web/templates/*.html")
+	t.Setenv("STATIC_DIR", "../../web/static")
+	router := NewRouter(app.NewServices(newFakeStore(), fakeAI{}), fakeRedis{})
+	client := newTestClient()
+
+	assertStatus(t, router, client, http.MethodPost, "/register", url.Values{"email": {"panic@example.test"}, "password": {"secret1"}}, http.StatusFound)
+	router.GET("/panic", func(c *gin.Context) {
+		panic("boom")
+	})
+
+	rec := assertStatus(t, router, client, http.MethodGet, "/panic", nil, http.StatusInternalServerError)
+	requestID := strings.TrimSpace(rec.Header().Get(requestIDHeaderName))
+	if requestID == "" {
+		t.Fatalf("expected %s header on panic response", requestIDHeaderName)
+	}
+	if !strings.Contains(rec.Body.String(), requestID) {
+		t.Fatalf("expected panic error page to contain request ID %q, body: %s", requestID, rec.Body.String())
 	}
 }
 
@@ -958,6 +1034,15 @@ func assertStatus(t *testing.T, handler http.Handler, client *testClient, method
 
 func assertStatusWithHeaders(t *testing.T, handler http.Handler, client *testClient, method, path string, form url.Values, headers map[string]string, status int) *httptest.ResponseRecorder {
 	t.Helper()
+	if client != nil && requiresCSRFFromClient(method, path) {
+		ensureCSRFCookieForClient(t, handler, client)
+		if form == nil {
+			form = url.Values{}
+		}
+		if token := csrfCookieValue(client); token != "" {
+			form.Set("csrf_token", token)
+		}
+	}
 	var body *strings.Reader
 	if form != nil {
 		body = strings.NewReader(form.Encode())
@@ -985,6 +1070,41 @@ func assertStatusWithHeaders(t *testing.T, handler http.Handler, client *testCli
 		client.cookies = mergeCookies(client.cookies, rec.Result().Cookies())
 	}
 	return rec
+}
+
+func ensureCSRFCookieForClient(t *testing.T, handler http.Handler, client *testClient) {
+	t.Helper()
+	if csrfCookieValue(client) != "" {
+		return
+	}
+	req := httptest.NewRequest(http.MethodGet, "/login", strings.NewReader(""))
+	for _, cookie := range client.cookies {
+		req.AddCookie(cookie)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	client.cookies = mergeCookies(client.cookies, rec.Result().Cookies())
+}
+
+func csrfCookieValue(client *testClient) string {
+	if client == nil {
+		return ""
+	}
+	for _, cookie := range client.cookies {
+		if cookie.Name == csrfCookieName {
+			return cookie.Value
+		}
+	}
+	return ""
+}
+
+func requiresCSRFFromClient(method, path string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+	default:
+		return false
+	}
+	return !strings.HasPrefix(path, "/login") && !strings.HasPrefix(path, "/register")
 }
 
 func mergeCookies(existing, updates []*http.Cookie) []*http.Cookie {

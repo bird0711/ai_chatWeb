@@ -43,10 +43,11 @@ func parseRoleID(c *gin.Context) (int64, bool) {
 }
 
 func renderError(c *gin.Context, status int, err error) {
-	log.Printf("http_error method=%s path=%s status=%d error=%q", c.Request.Method, c.Request.URL.Path, status, userFacingError(err))
+	log.Printf("http_error request_id=%s method=%s path=%s status=%d error=%q", requestID(c), c.Request.Method, c.Request.URL.Path, status, userFacingError(err))
 	c.HTML(status, "error.html", gin.H{
-		"Title": "Error",
-		"Error": userFacingError(err),
+		"Title":     "Error",
+		"Error":     userFacingError(err),
+		"RequestID": requestID(c),
 	})
 }
 
@@ -54,7 +55,30 @@ func logChatActionError(c *gin.Context, chatID int64, action string, err error) 
 	if err == nil {
 		return
 	}
-	log.Printf("chat_action_error action=%s method=%s path=%s chat_id=%d status=%d error=%q", action, c.Request.Method, c.Request.URL.Path, chatID, statusForAppError(err), userFacingError(err))
+	log.Printf("chat_action_error request_id=%s action=%s method=%s path=%s chat_id=%d status=%d error=%q", requestID(c), action, c.Request.Method, c.Request.URL.Path, chatID, statusForAppError(err), userFacingError(err))
+}
+
+func renderInternalServerError(c *gin.Context) {
+	if wantsJSON(c) {
+		c.JSON(nethttp.StatusInternalServerError, gin.H{
+			"error":      "internal server error",
+			"request_id": requestID(c),
+		})
+		return
+	}
+	c.HTML(nethttp.StatusInternalServerError, "error.html", gin.H{
+		"Title":     "Error",
+		"Error":     "internal server error",
+		"RequestID": requestID(c),
+	})
+}
+
+func renderJSONError(c *gin.Context, status int, err error) {
+	log.Printf("http_json_error request_id=%s method=%s path=%s status=%d error=%q", requestID(c), c.Request.Method, c.Request.URL.Path, status, userFacingError(err))
+	c.JSON(status, gin.H{
+		"error":      userFacingError(err),
+		"request_id": requestID(c),
+	})
 }
 
 func statusForError(err error) int {

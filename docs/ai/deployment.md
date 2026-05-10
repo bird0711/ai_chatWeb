@@ -2,6 +2,8 @@
 
 This document describes a stable self-hosted deployment shape for AI Chat Groups. It is not a record that production deployment has already been executed.
 
+For a manual pre-release and handoff check before deployment, use `docs/ai/release-checklist.md`.
+
 ## Target Shape
 
 - One Linux host or VM running the Go server as a long-running process.
@@ -136,6 +138,8 @@ After starting the service:
 6. Upload a small text file and ask the AI to summarize it.
 7. Run the calculator tool with `12 * (3 + 4)` and confirm result `84`.
 
+This startup verification is the deployment-side subset of the broader release checklist in `docs/ai/release-checklist.md`.
+
 ## Backup And Restore
 
 Recommended backup set:
@@ -174,5 +178,6 @@ Rollback process:
 
 - Current logs are process stdout/stderr and Gin request logs.
 - Production observability, structured logs, alerting, and external error reporting are handled in a later v1.0 slice.
-- CI configuration is handled in a later v1.0 slice.
+- CI configuration already exists in `.github/workflows/ci.yml`, with local command guidance in `docs/ai/ci.md`.
+- Use `docs/ai/observability.md` for incident checks and troubleshooting flow.
 - Do not expose the app directly to the public internet without TLS and a reverse proxy.

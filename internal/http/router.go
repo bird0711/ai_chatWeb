@@ -20,7 +20,7 @@ type Pinger interface {
 
 func NewRouter(services *app.Services, redis Pinger) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
-	router := gin.Default()
+	router := gin.New()
 	router.SetFuncMap(template.FuncMap{
 		"roleIDValue":   roleIDValue,
 		"joinModels":    joinModels,
@@ -38,13 +38,16 @@ func NewRouter(services *app.Services, redis Pinger) *gin.Engine {
 
 	server := &Server{services: services, redis: redis}
 
+	router.Use(server.assignRequestID)
+	router.Use(server.logRequests)
+	router.Use(server.recoverPanics)
 	router.Use(server.ensureCSRFCookie)
 	router.GET("/login", server.showLogin)
 	router.POST("/login", server.login)
 	router.GET("/register", server.showRegister)
 	router.POST("/register", server.register)
 
-    router.Use(server.requireCSRF)
+	router.Use(server.requireCSRF)
 	router.Use(server.requireAuth)
 	router.GET("/", server.redirectRoot)
 	router.POST("/logout", server.logout)

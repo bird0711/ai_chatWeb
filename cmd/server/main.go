@@ -2,15 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
-	"time"
-	"errors"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-
+	"time"
 
 	"ai_chat/internal/ai"
 	"ai_chat/internal/app"
@@ -53,8 +52,8 @@ func main() {
 	router := newRouter(mysqlStore, redisClient)
 
 	if err := runServer(cfg, router); err != nil {
-	log.Fatalf("run server: %v", err)
-}
+		log.Fatalf("run server: %v", err)
+	}
 
 }
 
@@ -138,12 +137,12 @@ func runServer(cfg config.Config, handler http.Handler) error {
 			return fmt.Errorf("shutdown server: %w", err)
 		}
 
-			err := <-errCh
-	log.Printf("server exit result: %v", err)
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("server stopped with error: %w", err)
-	}
-	return nil
+		err := <-errCh
+		log.Printf("server exit result: %v", err)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("server stopped with error: %w", err)
+		}
+		return nil
 
 	}
 }

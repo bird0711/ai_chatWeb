@@ -2,37 +2,35 @@
 
 ## Status
 
-MVP V1.0 is complete and accepted. No active backlog item blocks the current release.
+No blocking backlog item currently stops the engineering baseline from development, testing, Docker validation, or CI use. Remaining backlog items are improvement candidates, not blockers for the current stage.
 
-## Closed Scope
+## Baseline Already Landed
 
-- AI group chat main path
-- account login and account isolation
-- model API management and per-role model routing
-- AI role lifecycle and speaking controls
-- async replies and no-refresh chat flow
-- AI review / mutual review
-- chat topic guidance
-- responsive chat UI and theme mode
-- history filtering
-- Token usage statistics
-- supported file upload and AI file-context analysis
-- controlled built-in tools
-- deployment, CI, developer settings, and observability documentation
+- configuration cleanup
+- startup refactor
+- graceful shutdown
+- HTTP layer split
+- web security baseline
+- containerized stack
+- real-dependency integration tests
+- local development workflow unification
+- CI workflow cleanup
+- contributor documentation cleanup
 
-## Optional Future Enhancements
+## Open Improvement Directions
 
-These are intentionally not part of the accepted MVP V1.0 closeout:
-
+- stronger release checklist and handoff discipline
+- richer observability and troubleshooting diagnostics
+- deployment automation beyond the current manual/self-hosted guidance
+- browser E2E automation
+- production-grade secret management
+- structured logs, request IDs, metrics, alerts, tracing, and external error reporting
 - file delete, download, preview, OCR, complex PDF extraction, vector retrieval, or long-term knowledge base
 - model automatic tool calling
 - tool permission approvals and richer tool audit flows
 - provider failover, load balancing, cost routing, and non-OpenAI-compatible SDK support
-- structured logs, request IDs, metrics, alerts, tracing, and external error reporting
-- browser E2E automation
-- production-grade secret management
 - public community, multiplayer realtime collaboration, plugin market, or role marketplace
 
 ## Current Rule
 
-Do not implement future enhancements unless the user opens a new task.
+Use the backlog as a source of future step candidates, not as permission to implement unrelated large scope without an explicit active step.
