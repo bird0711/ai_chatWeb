@@ -48,7 +48,7 @@ func requireHTTPIntegrationEnv(t *testing.T) integrationEnv {
 		Password: getenv("MYSQL_PASSWORD", "4399"),
 		Host:     getenv("MYSQL_HOST", "localhost"),
 		Port:     getenv("MYSQL_PORT", "3307"),
-		Database: "ai_chat_test",
+		Database: "ai_chat_http_test",
 	}
 	if err := store.EnsureMySQLDatabase(ctx, mysqlCfg); err != nil {
 		t.Fatalf("ensure mysql database: %v", err)

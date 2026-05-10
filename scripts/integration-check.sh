@@ -6,7 +6,19 @@ compose_files="-f docker-compose.yml -f docker-compose.test.yml"
 cleanup() {
   docker compose $compose_files down -v
 }
-trap cleanup EXIT INT TERM
+
+on_exit() {
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    echo "integration check failed with status $status" >&2
+    docker compose $compose_files ps >&2 || true
+    docker compose $compose_files logs mysql redis >&2 || true
+  fi
+  cleanup
+  exit "$status"
+}
+
+trap on_exit EXIT INT TERM
 
 docker compose $compose_files up -d mysql redis
 

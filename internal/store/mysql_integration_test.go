@@ -31,7 +31,7 @@ func getTestDSN() string {
 	if port == "" {
 		port = "3307"
 	}
-	database := "ai_chat_test"
+	database := getenvDefault("MYSQL_DATABASE", "ai_chat_store_test")
 	return MySQLDSN(user, password, host, port, database)
 }
 
@@ -41,16 +41,16 @@ func requireMySQLStore(t *testing.T) *MySQLStore {
 	t.Helper()
 	ctx := context.Background()
 	cfg := MySQLConfig{
-		User:     "root",
-		Password: "4399",
-		Host:     "localhost",
-		Port:     "3307",
-		Database: "ai_chat_test",
+		User:     getenvDefault("MYSQL_USER", "root"),
+		Password: getenvDefault("MYSQL_PASSWORD", "4399"),
+		Host:     getenvDefault("MYSQL_HOST", "localhost"),
+		Port:     getenvDefault("MYSQL_PORT", "3307"),
+		Database: getenvDefault("MYSQL_DATABASE", "ai_chat_store_test"),
 	}
 	if err := EnsureMySQLDatabase(ctx, cfg); err != nil {
 		t.Fatalf("MySQL not available: %v", err)
 	}
-	store, err := OpenMySQL(getTestDSN())
+	store, err := OpenMySQL(cfg.DSN())
 	if err != nil {
 		t.Fatalf("Failed to open MySQL: %v", err)
 	}
@@ -74,6 +74,14 @@ func requireMySQLStore(t *testing.T) *MySQLStore {
 		_ = store.Close()
 	})
 	return store
+}
+
+func getenvDefault(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func TestMySQLOpenAndPing(t *testing.T) {
