@@ -7,16 +7,16 @@ import (
 )
 
 func (s *Server) showLogin(c *gin.Context) {
-	c.HTML(nethttp.StatusOK, "auth.html", gin.H{
-		"Title":  "鐧诲綍",
+	renderHTML(c, nethttp.StatusOK, "auth.html", gin.H{
+		"Title":  "登录",
 		"Mode":   "login",
 		"Action": "/login",
 	})
 }
 
 func (s *Server) showRegister(c *gin.Context) {
-	c.HTML(nethttp.StatusOK, "auth.html", gin.H{
-		"Title":  "娉ㄥ唽",
+	renderHTML(c, nethttp.StatusOK, "auth.html", gin.H{
+		"Title":  "注册",
 		"Mode":   "register",
 		"Action": "/register",
 	})
@@ -25,8 +25,8 @@ func (s *Server) showRegister(c *gin.Context) {
 func (s *Server) login(c *gin.Context) {
 	user, token, expiresAt, err := s.services.Login(c.Request.Context(), c.PostForm("email"), c.PostForm("password"))
 	if err != nil {
-		c.HTML(nethttp.StatusBadRequest, "auth.html", gin.H{
-			"Title": "鐧诲綍",
+		renderHTML(c, nethttp.StatusBadRequest, "auth.html", gin.H{
+			"Title": "登录",
 			"Mode":  "login",
 			"Email": c.PostForm("email"),
 			"Error": userFacingError(err),
@@ -41,8 +41,8 @@ func (s *Server) login(c *gin.Context) {
 func (s *Server) register(c *gin.Context) {
 	user, token, expiresAt, err := s.services.Register(c.Request.Context(), c.PostForm("email"), c.PostForm("password"))
 	if err != nil {
-		c.HTML(nethttp.StatusBadRequest, "auth.html", gin.H{
-			"Title": "娉ㄥ唽",
+		renderHTML(c, nethttp.StatusBadRequest, "auth.html", gin.H{
+			"Title": "注册",
 			"Mode":  "register",
 			"Email": c.PostForm("email"),
 			"Error": userFacingError(err),

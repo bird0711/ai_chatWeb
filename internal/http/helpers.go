@@ -104,6 +104,14 @@ func requestID(c *gin.Context) string {
 	return ""
 }
 
+func csrfToken(c *gin.Context) string {
+	value, _ := c.Get("CSRFToken")
+	if typed, ok := value.(string); ok {
+		return typed
+	}
+	return ""
+}
+
 func getenv(key, fallback string) string {
 	value := os.Getenv(key)
 	if value == "" {

@@ -44,11 +44,19 @@ func parseRoleID(c *gin.Context) (int64, bool) {
 
 func renderError(c *gin.Context, status int, err error) {
 	log.Printf("http_error request_id=%s method=%s path=%s status=%d error=%q", requestID(c), c.Request.Method, c.Request.URL.Path, status, userFacingError(err))
-	c.HTML(status, "error.html", gin.H{
+	renderHTML(c, status, "error.html", gin.H{
 		"Title":     "Error",
 		"Error":     userFacingError(err),
 		"RequestID": requestID(c),
 	})
+}
+
+func renderHTML(c *gin.Context, status int, name string, data gin.H) {
+	if data == nil {
+		data = gin.H{}
+	}
+	data["CSRFToken"] = csrfToken(c)
+	c.HTML(status, name, data)
 }
 
 func logChatActionError(c *gin.Context, chatID int64, action string, err error) {
@@ -66,7 +74,7 @@ func renderInternalServerError(c *gin.Context) {
 		})
 		return
 	}
-	c.HTML(nethttp.StatusInternalServerError, "error.html", gin.H{
+	renderHTML(c, nethttp.StatusInternalServerError, "error.html", gin.H{
 		"Title":     "Error",
 		"Error":     "internal server error",
 		"RequestID": requestID(c),

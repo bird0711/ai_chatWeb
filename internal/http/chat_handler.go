@@ -14,7 +14,7 @@ func (s *Server) listChats(c *gin.Context) {
 		renderError(c, nethttp.StatusInternalServerError, err)
 		return
 	}
-	c.HTML(nethttp.StatusOK, "chats_index.html", gin.H{
+	renderHTML(c, nethttp.StatusOK, "chats_index.html", gin.H{
 		"Title":       "AI 群聊",
 		"Chats":       chats,
 		"CurrentUser": currentUser(c),
@@ -25,7 +25,7 @@ func (s *Server) createChat(c *gin.Context) {
 	chat, err := s.services.CreateChat(c.Request.Context(), c.PostForm("name"))
 	if err != nil {
 		chats, _ := s.services.ListChats(c.Request.Context())
-		c.HTML(nethttp.StatusBadRequest, "chats_index.html", gin.H{
+		renderHTML(c, nethttp.StatusBadRequest, "chats_index.html", gin.H{
 			"Title":       "AI 群聊",
 			"Chats":       chats,
 			"Error":       userFacingError(err),
@@ -103,7 +103,7 @@ func (s *Server) showChat(c *gin.Context) {
 		renderError(c, nethttp.StatusInternalServerError, err)
 		return
 	}
-	c.HTML(nethttp.StatusOK, "chat_detail.html", gin.H{
+	renderHTML(c, nethttp.StatusOK, "chat_detail.html", gin.H{
 		"Title":       detail.Chat.Name,
 		"Chat":        detail.Chat,
 		"Roles":       detail.Roles,
@@ -314,7 +314,7 @@ func (s *Server) renderChatWithError(c *gin.Context, chatID int64, err error) {
 	}
 	configs, configErr := s.services.ListModelConfigs(c.Request.Context())
 	hasConfig := configErr == nil && len(configs) > 0
-	c.HTML(nethttp.StatusBadRequest, "chat_detail.html", gin.H{
+	renderHTML(c, nethttp.StatusBadRequest, "chat_detail.html", gin.H{
 		"Title":       detail.Chat.Name,
 		"Chat":        detail.Chat,
 		"Roles":       detail.Roles,

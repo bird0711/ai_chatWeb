@@ -48,9 +48,43 @@
     });
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", setupThemeToggle);
-  } else {
+  function readCookie(name) {
+    var prefix = name + "=";
+    var parts = document.cookie ? document.cookie.split(";") : [];
+    for (var i = 0; i < parts.length; i += 1) {
+      var part = parts[i].trim();
+      if (part.indexOf(prefix) === 0) {
+        return decodeURIComponent(part.slice(prefix.length));
+      }
+    }
+    return "";
+  }
+
+  function setupCSRFTokens() {
+    var token = readCookie("csrf_token");
+    if (!token) {
+      return;
+    }
+    document.querySelectorAll("form[method='post'], form[method='POST']").forEach(function (form) {
+      var input = form.querySelector("input[name='csrf_token']");
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "csrf_token";
+        form.insertBefore(input, form.firstChild);
+      }
+      input.value = token;
+    });
+  }
+
+  function setupPage() {
     setupThemeToggle();
+    setupCSRFTokens();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", setupPage);
+  } else {
+    setupPage();
   }
 })();

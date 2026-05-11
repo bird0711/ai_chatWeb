@@ -609,6 +609,29 @@ func TestAuthRegisterLoginLogoutAndIsolation(t *testing.T) {
 	}
 }
 
+func TestRenderedChatIndexFormsIncludeCSRFToken(t *testing.T) {
+	t.Setenv("TEMPLATE_GLOB", "../../web/templates/*.html")
+	t.Setenv("STATIC_DIR", "../../web/static")
+	router := NewRouter(app.NewServices(newFakeStore(), fakeAI{}), fakeRedis{})
+	client := newTestClient()
+
+	assertStatus(t, router, client, http.MethodPost, "/register", url.Values{"email": {"csrf@example.test"}, "password": {"secret1"}}, http.StatusFound)
+	body := assertStatus(t, router, client, http.MethodGet, "/chats", nil, http.StatusOK).Body.String()
+	token := csrfCookieValue(client)
+	if token == "" {
+		t.Fatal("expected csrf cookie to be set")
+	}
+	tokenField := `name="csrf_token" value="` + token + `"`
+	for _, expected := range []string{`action="/logout"`, `action="/chats"`, tokenField} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected chat index to contain %q, body: %s", expected, body)
+		}
+	}
+	if strings.Contains(body, `name="csrf_token" value=""`) {
+		t.Fatalf("expected chat index csrf fields to be non-empty, body: %s", body)
+	}
+}
+
 func TestV02AsyncMessagesAndDeletionRoutes(t *testing.T) {
 	t.Setenv("TEMPLATE_GLOB", "../../web/templates/*.html")
 	t.Setenv("STATIC_DIR", "../../web/static")

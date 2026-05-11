@@ -18,7 +18,7 @@
       {{ end }}
       {{ if .Error }}<div class="alert error">{{ .Error }}</div>{{ end }}
       <form method="post" action="{{ .Action }}" class="stack-form">
-        <input type="hidden" name="csrf_token" value="">
+        <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
 
         <label>
           <span>邮箱</span>

@@ -14,7 +14,7 @@ func (s *Server) showSettings(c *gin.Context) {
 		renderError(c, nethttp.StatusInternalServerError, err)
 		return
 	}
-	c.HTML(nethttp.StatusOK, "settings.html", gin.H{
+	renderHTML(c, nethttp.StatusOK, "settings.html", gin.H{
 		"Title":       "模型 API 设置",
 		"Configs":     configs,
 		"CurrentUser": currentUser(c),
@@ -33,7 +33,7 @@ func (s *Server) saveSettings(c *gin.Context) {
 	)
 	if err != nil {
 		configs, _ := s.services.ListModelConfigs(c.Request.Context())
-		c.HTML(nethttp.StatusBadRequest, "settings.html", gin.H{
+		renderHTML(c, nethttp.StatusBadRequest, "settings.html", gin.H{
 			"Title":       "模型 API 设置",
 			"Config":      config,
 			"Configs":     configs,
@@ -43,7 +43,7 @@ func (s *Server) saveSettings(c *gin.Context) {
 		return
 	}
 	configs, _ := s.services.ListModelConfigs(c.Request.Context())
-	c.HTML(nethttp.StatusOK, "settings.html", gin.H{
+	renderHTML(c, nethttp.StatusOK, "settings.html", gin.H{
 		"Title":       "模型 API 设置",
 		"Config":      config,
 		"Configs":     configs,
@@ -61,7 +61,7 @@ func (s *Server) checkSettings(c *gin.Context) {
 	)
 	if err != nil {
 		configs, _ := s.services.ListModelConfigs(c.Request.Context())
-		c.HTML(nethttp.StatusBadRequest, "settings.html", gin.H{
+		renderHTML(c, nethttp.StatusBadRequest, "settings.html", gin.H{
 			"Title":       "模型 API 设置",
 			"Config":      config,
 			"Configs":     configs,
@@ -72,7 +72,7 @@ func (s *Server) checkSettings(c *gin.Context) {
 	}
 	config.Name = c.PostForm("name")
 	configs, _ := s.services.ListModelConfigs(c.Request.Context())
-	c.HTML(nethttp.StatusOK, "settings.html", gin.H{
+	renderHTML(c, nethttp.StatusOK, "settings.html", gin.H{
 		"Title":       "模型 API 设置",
 		"Config":      config,
 		"Configs":     configs,
@@ -89,7 +89,7 @@ func (s *Server) deleteSettings(c *gin.Context) {
 	}
 	if err := s.services.DeleteModelConfig(c.Request.Context(), configID); err != nil {
 		configs, _ := s.services.ListModelConfigs(c.Request.Context())
-		c.HTML(nethttp.StatusBadRequest, "settings.html", gin.H{
+		renderHTML(c, nethttp.StatusBadRequest, "settings.html", gin.H{
 			"Title":       "模型 API 设置",
 			"Configs":     configs,
 			"Error":       userFacingError(err),
@@ -116,7 +116,7 @@ func (s *Server) showHealth(c *gin.Context) {
 			redisError = err.Error()
 		}
 	}
-	c.HTML(nethttp.StatusOK, "health.html", gin.H{
+	renderHTML(c, nethttp.StatusOK, "health.html", gin.H{
 		"Title":       "系统状态",
 		"MySQLStatus": mysqlStatus,
 		"MySQLError":  mysqlError,
@@ -132,7 +132,7 @@ func (s *Server) showUsage(c *gin.Context) {
 		renderError(c, nethttp.StatusInternalServerError, err)
 		return
 	}
-	c.HTML(nethttp.StatusOK, "usage.html", gin.H{
+	renderHTML(c, nethttp.StatusOK, "usage.html", gin.H{
 		"Title":       "Token 统计",
 		"Stats":       stats,
 		"CurrentUser": currentUser(c),
