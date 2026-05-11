@@ -2,7 +2,7 @@
 
 ## Current Project Position
 
-This repository is not in a "final closeout" state. It is being improved step by step into a stronger engineering baseline.
+This repository is closed out as the first Go backend portfolio project. It should now stay focused on demonstrating engineering completeness rather than absorbing unrelated large feature work.
 
 ## Completed Engineering Steps
 
@@ -19,10 +19,11 @@ This repository is not in a "final closeout" state. It is being improved step by
 11. contributor-facing documentation and handoff cleanup
 12. release and operations polish
 13. request-level observability baseline
+14. portfolio closeout and resume positioning
 
 ## Current Step
 
-Step 13 is complete. The next candidate is Step 14.
+The current project is complete for the portfolio stage. The next recommended work is a second project with deeper backend technical focus.
 
 ## Recommended Working Pattern
 

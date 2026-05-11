@@ -1,4 +1,4 @@
-.PHONY: help run dev-run fmt test vet lint check cover integration dev-deps-up dev-deps-down dev-deps-reset dev-deps-ps dev-deps-logs stack-up stack-down stack-reset stack-ps stack-logs
+.PHONY: help run dev-run fmt test vet lint check cover integration ci-debug dev-deps-up dev-deps-down dev-deps-reset dev-deps-ps dev-deps-logs stack-up stack-down stack-reset stack-ps stack-logs
 
 help:
 	@echo "Available commands:"
@@ -9,6 +9,7 @@ help:
 	@echo "  make dev-deps-reset - stop Docker dev deps and remove volumes"
 	@echo "  make check          - run fmt, tests, vet, and lint"
 	@echo "  make integration    - run tagged real-dependency integration tests"
+	@echo "  make ci-debug       - summarize the latest failed GitHub Actions log"
 	@echo "  make stack-up       - start full Docker stack"
 	@echo "  make stack-down     - stop full Docker stack"
 	@echo "  make stack-reset    - stop full Docker stack and remove volumes"
@@ -53,6 +54,9 @@ cover:
 
 integration:
 	sh scripts/integration-check.sh
+
+ci-debug:
+	sh scripts/ci-debug.sh $(RUN_ID)
 
 stack-up:
 	docker compose up --build -d

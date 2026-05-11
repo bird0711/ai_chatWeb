@@ -73,6 +73,34 @@ It now uses three CI jobs:
 
 If the hosted runner does not yet provide the exact Go version from `go.mod`, run `scripts/ci-check.sh` and `scripts/integration-check.sh` locally until the runner image supports it.
 
+## Debug Failed Runs
+
+Use the helper script when GitHub Actions fails and the web UI only shows the final `Process completed with exit code 1` line.
+
+Latest run:
+
+```sh
+make ci-debug
+```
+
+Specific run:
+
+```sh
+RUN_ID=25632709391 make ci-debug
+```
+
+The script:
+
+- prints each job and its conclusion
+- saves failed-step logs under `/tmp/ai-chat-ci-<run-id>.log`
+- extracts likely root-cause lines such as `--- FAIL`, `expected`, `Error:`, and `Process completed`
+
+For more surrounding context after running it:
+
+```sh
+grep -n -C 5 -E -- '--- FAIL|Error:|Process completed' /tmp/ai-chat-ci-<run-id>.log
+```
+
 ## Out Of Scope
 
 - Browser end-to-end tests.

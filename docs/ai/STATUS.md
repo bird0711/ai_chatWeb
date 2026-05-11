@@ -6,11 +6,11 @@ Incremental engineering improvement pass.
 
 ## Current Phase
 
-Step 13 completed: request-level observability baseline.
+Project closeout completed for the current Go backend portfolio stage.
 
 ## Current Goal
 
-Keep the repository easier to release, hand off, and troubleshoot with explicit checklists plus request-level diagnostics.
+Keep this repository as a stable, engineering-focused Go backend portfolio project.
 
 ## Completed Steps
 
@@ -27,6 +27,7 @@ Keep the repository easier to release, hand off, and troubleshoot with explicit 
 11. Contributor-facing documentation and handoff cleanup.
 12. Release checklist and operations/troubleshooting guidance.
 13. Request ID and panic-recovery observability baseline.
+14. Final portfolio closeout: CI confirmed green, local checks verified, and README positioning updated.
 
 ## Current Working Model
 
@@ -44,8 +45,8 @@ Keep the repository easier to release, hand off, and troubleshoot with explicit 
 
 ## Current Risks
 
-- Contributor-facing docs must stay aligned with the actual Make targets and scripts as future steps change workflows.
-- Observability is better at request tracing now, but still lacks metrics, structured log output, and async correlation.
+- The project is suitable as an engineering-focused internship portfolio project, not as a high-concurrency distributed system.
+- Future large features should usually go into a second project instead of expanding this repository indefinitely.
 
 ## Blockers
 
@@ -53,4 +54,4 @@ None.
 
 ## Next Recommendation
 
-Start Step 14 by choosing between deeper observability follow-through or more automation around deployment/release workflow support.
+Use this project as the first portfolio project and start a second project with deeper backend technical focus, such as an async task queue or scheduler.

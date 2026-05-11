@@ -2,6 +2,21 @@
 
 AI Chat Groups is a Gin-based Go web app for account-isolated AI group chats with configurable AI roles, model API settings, token usage statistics, and early v1.0 file-assisted analysis.
 
+## Project Positioning
+
+This project is an engineering-focused Go backend portfolio project. It is intended to demonstrate a complete backend development workflow rather than a high-concurrency or distributed-systems architecture.
+
+Core engineering points:
+
+- layered Go application structure: HTTP handlers, application services, domain models, store adapters, and config loading
+- MySQL persistence for users, sessions, chats, roles, messages, model configs, files, tools, and usage statistics
+- Redis dependency integration and health checking
+- standard `http.Server` startup with graceful shutdown
+- CSRF protection, secure-cookie switch, content-based upload validation, request IDs, and panic recovery
+- Docker Compose workflows for local dependencies, integration tests, and full-stack validation
+- GitHub Actions CI with default checks, build, and real MySQL/Redis integration tests
+- contributor, deployment, release checklist, observability, and CI troubleshooting documentation
+
 ## Required Services
 
 - MySQL
@@ -182,6 +197,20 @@ Latest coverage snapshot (`go test ./... -cover`):
 The same test/build gate is documented in `docs/ai/ci.md`.
 Contributor workflow details are documented in `CONTRIBUTING.md`.
 Release and handoff verification is documented in `docs/ai/release-checklist.md`.
+
+Current verified status:
+
+- latest GitHub Actions run is green
+- `make check` passes locally
+- `make integration` passes locally
+
+## Resume Summary
+
+Suggested concise resume wording:
+
+```text
+AI multi-role chat web application: built a Go/Gin backend with MySQL, Redis, Docker Compose, GitHub Actions CI, real-dependency integration tests, CSRF protection, file upload validation, request IDs, panic recovery, and release/operations documentation.
+```
 
 ## Integration Tests
 
